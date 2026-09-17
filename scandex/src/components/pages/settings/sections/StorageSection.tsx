@@ -1,7 +1,7 @@
 // =================================
 //  IMPORTS
 // =================================
-import { Database, HardDrive } from "lucide-react";
+import { HardDrive } from "lucide-react";
 import type { DbStats } from "../../../../services/db/types.ts";
 import type { StorageEstimateInfo } from "../../../../services/opfs/images.ts";
 
@@ -48,11 +48,6 @@ export default function StorageSection({
           </span>
         </div>
       </div>
-      <p className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400">
-        <Database size={12} />
-        Database SQLite e immagini salvati in locale (OPFS) su questo
-        dispositivo.
-      </p>
     </section>
   );
 }

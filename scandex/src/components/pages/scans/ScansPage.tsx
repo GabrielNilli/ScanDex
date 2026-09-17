@@ -2,8 +2,7 @@
 //  IMPORTS
 // =================================
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChangeEvent } from "react";
-import { Camera } from "lucide-react";
+import { Camera, Wifi } from "lucide-react";
 import {
   fetchCardImage,
   searchCard,
@@ -16,6 +15,12 @@ import {
   listCollections,
   type CollectionWithCount,
 } from "../../../services/collections/collectionsService.ts";
+import {
+  getStatus as getRemoteStatus,
+  sendScan,
+  subscribeStatus as subscribeRemoteStatus,
+  type RemoteStatus,
+} from "../../../services/remote/remoteService.ts";
 import { canvasToBlob, computeCropRect } from "./lib/cropImage.ts";
 import CameraStepSection from "./sections/CameraStepSection.tsx";
 import LoadingStepSection from "./sections/LoadingStepSection.tsx";
@@ -66,11 +71,21 @@ export default function ScansPage() {
 
   // --- Collezione di destinazione ---
   const [collections, setCollections] = useState<CollectionWithCount[]>([]);
-  const [targetCollectionId, setTargetCollectionId] = useState<number | "">(
-    "",
-  );
+  const [targetCollectionId, setTargetCollectionId] = useState<number | "">("");
   const [newCollectionName, setNewCollectionName] = useState<string>("");
   const [creatingCollection, setCreatingCollection] = useState(false);
+
+  // --- Collegamento remoto (questo telefono collegato a un PC, vedi Impostazioni) ---
+  const [remoteStatus, setRemoteStatus] = useState<RemoteStatus>(() =>
+    getRemoteStatus(),
+  );
+  const [remoteCollectionName, setRemoteCollectionName] = useState<string>("");
+  const isRemoteClient = remoteStatus.role === "client" && remoteStatus.connected;
+  // Congela l'esito al momento del salvataggio: se la connessione cade subito dopo
+  // un invio riuscito, la schermata finale non deve cambiare messaggio a posteriori.
+  const [lastSaveWasRemote, setLastSaveWasRemote] = useState(false);
+
+  useEffect(() => subscribeRemoteStatus(setRemoteStatus), []);
 
   // Avvio/stop della fotocamera in base allo step corrente
   useEffect(() => {
@@ -104,7 +119,7 @@ export default function ScansPage() {
       } catch (err) {
         console.warn("Errore accesso fotocamera:", err);
         setCameraError(
-          "Impossibile accedere alla fotocamera. Puoi comunque caricare una foto manualmente.",
+          "Impossibile accedere alla fotocamera. Controlla i permessi del browser e riprova.",
         );
       }
     }
@@ -185,19 +200,6 @@ export default function ScansPage() {
     await runOcr(canvas);
   }, [runOcr]);
 
-  const handleFileUpload = useCallback(
-    async (e: ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      setCapturedUrl(url);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      await runOcr(file);
-    },
-    [runOcr],
-  );
-
   const handleRetake = () => {
     if (capturedUrl) URL.revokeObjectURL(capturedUrl);
     setCapturedUrl(null);
@@ -268,13 +270,23 @@ export default function ScansPage() {
 
   const handleSave = async () => {
     if (!selectedResult || !resultImageBlob) return;
+    const sendingRemotely = isRemoteClient;
     setStep("saving");
     try {
-      await saveScannedCard({
-        collectionId: targetCollectionId === "" ? null : targetCollectionId,
-        result: selectedResult,
-        imageBlob: resultImageBlob,
-      });
+      if (sendingRemotely) {
+        await sendScan({
+          result: selectedResult,
+          imageBlob: resultImageBlob,
+          collectionName: remoteCollectionName.trim() || null,
+        });
+      } else {
+        await saveScannedCard({
+          collectionId: targetCollectionId === "" ? null : targetCollectionId,
+          result: selectedResult,
+          imageBlob: resultImageBlob,
+        });
+      }
+      setLastSaveWasRemote(sendingRemotely);
       setStep("done");
     } catch (err) {
       console.error("Errore salvataggio carta:", err);
@@ -297,6 +309,8 @@ export default function ScansPage() {
     setResultImageUrl(null);
     setResultImageBlob(null);
     setErrorMessage(null);
+    setRemoteCollectionName("");
+    setLastSaveWasRemote(false);
     setStep("camera");
   };
 
@@ -304,7 +318,7 @@ export default function ScansPage() {
   //  RENDER
   // =================================
   return (
-    <div className="min-h-dvh bg-slate-50 pb-24 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+    <div className="min-h-dvh bg-slate-50 pb-24 text-slate-900 dark:bg-slate-900 dark:text-slate-100 lg:pb-6">
       <canvas ref={canvasRef} className="hidden" />
 
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white px-4 pt-6 pb-4 dark:border-slate-700 dark:bg-slate-800">
@@ -316,6 +330,12 @@ export default function ScansPage() {
           Inquadra la carta nel riquadro, verrà riconosciuta tramite OCR e
           cercata su PokeWallet.
         </p>
+        {isRemoteClient && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+            <Wifi size={12} />
+            Collegato al PC: le carte verranno inviate lì
+          </p>
+        )}
       </header>
 
       <main className="mx-auto max-w-lg px-4 pt-4">
@@ -326,7 +346,6 @@ export default function ScansPage() {
             cameraError={cameraError}
             cameraReady={cameraReady}
             onCapture={handleCapture}
-            onFileUpload={handleFileUpload}
           />
         )}
 
@@ -378,15 +397,31 @@ export default function ScansPage() {
             onCreateCollection={handleCreateCollection}
             onCancel={() => setStep("review")}
             onSave={handleSave}
+            remoteMode={isRemoteClient}
+            remoteCollectionName={remoteCollectionName}
+            onRemoteCollectionNameChange={setRemoteCollectionName}
           />
         )}
 
         {step === "saving" && (
-          <LoadingStepSection message="Salvataggio in corso..." />
+          <LoadingStepSection
+            message={
+              isRemoteClient
+                ? "Invio al PC in corso..."
+                : "Salvataggio in corso..."
+            }
+          />
         )}
 
         {step === "done" && (
-          <DoneStepSection onScanAnother={handleScanAnother} />
+          <DoneStepSection
+            onScanAnother={handleScanAnother}
+            message={
+              lastSaveWasRemote
+                ? "Carta inviata al PC!"
+                : "Carta salvata nella tua collezione!"
+            }
+          />
         )}
       </main>
     </div>

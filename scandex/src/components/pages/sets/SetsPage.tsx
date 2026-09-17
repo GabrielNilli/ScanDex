@@ -9,6 +9,7 @@ import {
   listCardsBySetId,
   refreshCardPricing,
   setFavorite,
+  updateCardNotes,
 } from "../../../services/cards/cardsService.ts";
 import type { CardRecord, SetRecord } from "../../../services/db/types.ts";
 import {
@@ -105,6 +106,17 @@ export default function SetsPage() {
     setDetailCard((prev) => (prev && prev.id === updated.id ? updated : prev));
   };
 
+  const handleUpdateNotes = async (card: CardRecord, notes: string) => {
+    await updateCardNotes(card.id, notes);
+    const trimmed = notes.trim() || null;
+    setSetCards((prev) =>
+      prev.map((c) => (c.id === card.id ? { ...c, notes: trimmed } : c)),
+    );
+    setDetailCard((prev) =>
+      prev && prev.id === card.id ? { ...prev, notes: trimmed } : prev,
+    );
+  };
+
   const handleDeleteCard = async (card: CardRecord) => {
     if (!window.confirm(`Eliminare "${card.name}" dalla collezione?`)) return;
     await deleteCard(card.id);
@@ -117,11 +129,11 @@ export default function SetsPage() {
   //  RENDER
   // =================================
   return (
-    <div className="min-h-dvh bg-slate-50 pb-24 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+    <div className="min-h-dvh bg-slate-50 pb-24 text-slate-900 dark:bg-slate-900 dark:text-slate-100 lg:pb-6">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white px-4 pt-6 pb-4 dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Logo size={26} />
+            <Logo size={26} className="lg:hidden" />
             <h1 className="font-headline text-xl font-bold tracking-tight">
               Set
             </h1>
@@ -141,8 +153,8 @@ export default function SetsPage() {
         </p>
       </header>
 
-      <main className="mx-auto max-w-4xl space-y-3 px-4 pt-4">
-        <div className="relative">
+      <main className="mx-auto max-w-6xl space-y-3 px-4 pt-4">
+        <div className="relative lg:max-w-md">
           <Search
             size={16}
             className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -188,6 +200,7 @@ export default function SetsPage() {
           onToggleFavorite={handleToggleFavorite}
           onDelete={handleDeleteCard}
           onRefreshPrice={handleRefreshPrice}
+          onUpdateNotes={handleUpdateNotes}
         />
       )}
     </div>

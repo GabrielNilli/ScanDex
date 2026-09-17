@@ -216,33 +216,56 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * Ottiene la stima dello spazio occupato e della quota del browser.
+ * Calcola lo spazio realmente occupato da ScanDex sommando le dimensioni reali dei
+ * file OPFS (immagini + database sqlite). `navigator.storage.estimate().usage` non
+ * viene usato per questo numero perché su molti browser mobili (Chrome Android,
+ * Safari iOS) è arrotondato/quantizzato per motivi anti-fingerprinting e può restare
+ * bloccato su un valore fisso (es. sempre "4 GB") senza rispecchiare i dati reali.
+ */
+async function getRealOpfsUsage(): Promise<number> {
+  const [rootFiles, images] = await Promise.all([
+    listOpfsRootFiles(),
+    listStoredImages(),
+  ]);
+  const rootFilesSize = rootFiles.reduce((sum, f) => sum + (f.size ?? 0), 0);
+  const imagesSize = images.reduce((sum, img) => sum + img.size, 0);
+  return rootFilesSize + imagesSize;
+}
+
+/**
+ * Ottiene lo spazio realmente usato da ScanDex (calcolato dai file OPFS) e, quando
+ * disponibile, la quota di spazio residua del dispositivo per il browser.
  */
 export async function getStorageEstimate(): Promise<StorageEstimateInfo> {
-  if (
-    typeof navigator !== "undefined" &&
-    navigator.storage &&
-    navigator.storage.estimate
-  ) {
-    const estimate = await navigator.storage.estimate();
-    const usage = estimate.usage ?? 0;
-    const quota = estimate.quota ?? 1;
-    const percentUsed = Math.min(100, (usage / quota) * 100);
-
+  if (!isOpfsSupported()) {
     return {
-      usage,
-      quota,
-      usageFormatted: formatBytes(usage),
-      quotaFormatted: formatBytes(quota),
-      percentUsed: Number(percentUsed.toFixed(2)),
+      usage: 0,
+      quota: 0,
+      usageFormatted: "N/D",
+      quotaFormatted: "N/D",
+      percentUsed: 0,
     };
   }
 
+  const usage = await getRealOpfsUsage();
+
+  let quota = 0;
+  if (typeof navigator !== "undefined" && navigator.storage?.estimate) {
+    try {
+      const estimate = await navigator.storage.estimate();
+      quota = estimate.quota ?? 0;
+    } catch (err) {
+      console.warn("Impossibile ottenere la quota di storage:", err);
+    }
+  }
+
+  const percentUsed = quota > 0 ? Math.min(100, (usage / quota) * 100) : 0;
+
   return {
-    usage: 0,
-    quota: 0,
-    usageFormatted: "N/D",
-    quotaFormatted: "N/D",
-    percentUsed: 0,
+    usage,
+    quota,
+    usageFormatted: formatBytes(usage),
+    quotaFormatted: quota > 0 ? formatBytes(quota) : "N/D",
+    percentUsed: Number(percentUsed.toFixed(2)),
   };
 }

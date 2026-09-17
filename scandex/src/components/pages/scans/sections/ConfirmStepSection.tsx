@@ -1,7 +1,7 @@
 // =================================
 //  IMPORTS
 // =================================
-import { AlertTriangle, CheckCircle2, Loader2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, Send, X } from "lucide-react";
 import type { PokewalletSearchResult } from "../../../../services/pokewallet/pokewalletApi.ts";
 import type { CollectionWithCount } from "../../../../services/collections/collectionsService.ts";
 
@@ -22,6 +22,9 @@ export default function ConfirmStepSection({
   onCreateCollection,
   onCancel,
   onSave,
+  remoteMode = false,
+  remoteCollectionName = "",
+  onRemoteCollectionNameChange,
 }: {
   result: PokewalletSearchResult;
   imageUrl: string | null;
@@ -36,6 +39,10 @@ export default function ConfirmStepSection({
   onCreateCollection: () => void;
   onCancel: () => void;
   onSave: () => void;
+  /** true quando questo telefono è collegato a un PC ed invierà la carta invece di salvarla in locale. */
+  remoteMode?: boolean;
+  remoteCollectionName?: string;
+  onRemoteCollectionNameChange?: (value: string) => void;
 }) {
   // =================================
   //  RENDER
@@ -71,44 +78,59 @@ export default function ConfirmStepSection({
         </div>
       )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
-          Salva nella collezione
-        </label>
-        <select
-          value={targetCollectionId}
-          onChange={(e) =>
-            onTargetCollectionChange(
-              e.target.value === "" ? "" : Number(e.target.value),
-            )
-          }
-          className="mb-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
-        >
-          <option value="">Nessuna collezione</option>
-          {collections.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name} ({c.cardCount})
-            </option>
-          ))}
-        </select>
-
-        <div className="flex gap-2">
+      {remoteMode ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+            Collezione sul PC (facoltativa)
+          </label>
           <input
             type="text"
-            value={newCollectionName}
-            onChange={(e) => onNewCollectionNameChange(e.target.value)}
-            placeholder="Nuova collezione..."
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+            value={remoteCollectionName}
+            onChange={(e) => onRemoteCollectionNameChange?.(e.target.value)}
+            placeholder="Es. Base Set (verrà creata se non esiste)"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
           />
-          <button
-            onClick={onCreateCollection}
-            disabled={!newCollectionName.trim() || creatingCollection}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
-          >
-            Crea
-          </button>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
+            Salva nella collezione
+          </label>
+          <select
+            value={targetCollectionId}
+            onChange={(e) =>
+              onTargetCollectionChange(
+                e.target.value === "" ? "" : Number(e.target.value),
+              )
+            }
+            className="mb-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+          >
+            <option value="">Nessuna collezione</option>
+            {collections.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.cardCount})
+              </option>
+            ))}
+          </select>
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newCollectionName}
+              onChange={(e) => onNewCollectionNameChange(e.target.value)}
+              placeholder="Nuova collezione..."
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-700"
+            />
+            <button
+              onClick={onCreateCollection}
+              disabled={!newCollectionName.trim() || creatingCollection}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              Crea
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-3">
         <button
@@ -123,8 +145,8 @@ export default function ConfirmStepSection({
           disabled={!imageReady}
           className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-40"
         >
-          <CheckCircle2 size={16} />
-          Salva carta
+          {remoteMode ? <Send size={16} /> : <CheckCircle2 size={16} />}
+          {remoteMode ? "Invia al PC" : "Salva carta"}
         </button>
       </div>
     </div>

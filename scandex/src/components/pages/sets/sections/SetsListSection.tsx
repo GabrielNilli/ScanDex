@@ -40,7 +40,7 @@ export default function SetsListSection({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-2 lg:space-y-0 xl:grid-cols-3">
       {sets.map((entry) => (
         <SetRow
           key={entry.set.set_id}

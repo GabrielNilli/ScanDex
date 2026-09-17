@@ -10,6 +10,8 @@
  * l'app nel browser. Nascondere davvero la chiave richiederebbe un proxy server-side.
  */
 
+import { recordApiCall } from "./rateLimitTracker.ts";
+
 const API_BASE = "https://api.pokewallet.io";
 const API_KEY = import.meta.env.VITE_POKEWALLET_API_KEY;
 
@@ -90,6 +92,7 @@ async function pokewalletFetch(path: string): Promise<Response> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: { "X-API-Key": API_KEY },
   });
+  recordApiCall();
   if (!response.ok) {
     let message = `Richiesta pokewallet fallita (HTTP ${response.status})`;
     try {

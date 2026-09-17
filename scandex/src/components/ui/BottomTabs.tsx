@@ -22,7 +22,7 @@ export default function BottomTabs() {
   //  RENDER
   // =================================
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex justify-around border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] pt-2 dark:border-slate-700 dark:bg-slate-800">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 flex justify-around border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] pt-2 dark:border-slate-700 dark:bg-slate-800 lg:hidden">
       {tabs.map(({ to, icon: Icon, label }) => (
         <NavLink
           key={to}

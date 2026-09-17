@@ -1,8 +1,8 @@
 // =================================
 //  IMPORTS
 // =================================
-import type { ChangeEvent, RefObject } from "react";
-import { AlertTriangle, Camera, ImagePlus, Loader2 } from "lucide-react";
+import type { RefObject } from "react";
+import { AlertTriangle, Camera, Loader2 } from "lucide-react";
 
 // =================================
 //  COMPONENT
@@ -13,14 +13,12 @@ export default function CameraStepSection({
   cameraError,
   cameraReady,
   onCapture,
-  onFileUpload,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   guideRef: RefObject<HTMLDivElement | null>;
   cameraError: string | null;
   cameraReady: boolean;
   onCapture: () => void;
-  onFileUpload: (e: ChangeEvent<HTMLInputElement>) => void;
 }) {
   // =================================
   //  RENDER
@@ -74,17 +72,6 @@ export default function CameraStepSection({
           <Camera size={18} />
           Scatta
         </button>
-        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
-          <ImagePlus size={18} />
-          Carica foto
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={onFileUpload}
-          />
-        </label>
       </div>
     </div>
   );

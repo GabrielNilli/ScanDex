@@ -159,6 +159,18 @@ export async function setFavorite(
 }
 
 /**
+ * Salva la nota libera dell'utente su una carta (es. condizione, provenienza,
+ * prezzo pagato). Una stringa vuota viene salvata come NULL.
+ */
+export async function updateCardNotes(id: number, notes: string): Promise<void> {
+  const trimmed = notes.trim();
+  await dbService.exec("UPDATE cards SET notes = ? WHERE id = ?", [
+    trimmed || null,
+    id,
+  ]);
+}
+
+/**
  * Ricarica dati e prezzi aggiornati di una carta da pokewallet e li salva nel raw_json,
  * senza toccare l'immagine o gli altri campi già salvati (nome, numero, ecc. restano
  * quelli scelti al momento dello scan anche se pokewallet li avesse nel frattempo

@@ -35,7 +35,7 @@ export default function CollectionsGridSection({
   // =================================
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex gap-2 lg:max-w-md">
         <button
           onClick={onShowNewCollectionForm}
           className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-500"
@@ -53,7 +53,7 @@ export default function CollectionsGridSection({
       </div>
 
       {showNewCollectionForm && (
-        <div className="flex gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="flex gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800 lg:max-w-md">
           <input
             autoFocus
             type="text"
@@ -91,7 +91,7 @@ export default function CollectionsGridSection({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {collections.map((collection) => (
             <div
               key={collection.id}
@@ -114,7 +114,7 @@ export default function CollectionsGridSection({
               </button>
               <button
                 onClick={() => onDeleteCollection(collection)}
-                className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-slate-400 opacity-0 shadow-sm transition-opacity hover:text-red-600 group-hover:opacity-100 dark:bg-slate-700/90"
+                className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-slate-400 shadow-sm transition-colors hover:text-red-600 dark:bg-slate-700/90"
                 title="Elimina collezione"
               >
                 <Trash2 size={14} />

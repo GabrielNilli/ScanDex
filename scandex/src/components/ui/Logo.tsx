@@ -1,6 +1,7 @@
 // =================================
 //  IMPORTS
 // =================================
+import { useId } from "react";
 
 // =================================
 //  COMPONENT
@@ -18,6 +19,12 @@ export default function Logo({
   rounded?: boolean;
   className?: string;
 }) {
+  // Id univoco per istanza: con la sidebar desktop possono esserci più <Logo> montati
+  // contemporaneamente (uno nascosto via CSS su mobile, uno visibile nell'header), e un
+  // id di gradiente duplicato nel DOM fa fallire silenziosamente il render su alcuni
+  // browser mobili (lo scudo appare tutto nero invece che oro).
+  const gradientId = `scandex-gold-${useId()}`;
+
   return (
     <svg
       width={size}
@@ -28,7 +35,7 @@ export default function Logo({
       aria-label="ScanDex"
     >
       <defs>
-        <linearGradient id="scandex-gold" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#FBBF24" />
           <stop offset="100%" stopColor="#B45309" />
         </linearGradient>
@@ -42,7 +49,7 @@ export default function Logo({
       <path
         d="M24 8 L35 12 V22 C35 30.5 30.5 36.5 24 39.5 C17.5 36.5 13 30.5 13 22 V12 Z"
         fill="none"
-        stroke="url(#scandex-gold)"
+        stroke={`url(#${gradientId})`}
         strokeWidth="2"
         strokeLinejoin="round"
       />
@@ -51,7 +58,7 @@ export default function Logo({
         cy="22.5"
         r="8"
         fill="none"
-        stroke="url(#scandex-gold)"
+        stroke={`url(#${gradientId})`}
         strokeWidth="1.4"
       />
       <ellipse
@@ -60,7 +67,7 @@ export default function Logo({
         rx="3.4"
         ry="8"
         fill="none"
-        stroke="url(#scandex-gold)"
+        stroke={`url(#${gradientId})`}
         strokeWidth="1.2"
       />
       <line
@@ -68,7 +75,7 @@ export default function Logo({
         y1="22.5"
         x2="32"
         y2="22.5"
-        stroke="url(#scandex-gold)"
+        stroke={`url(#${gradientId})`}
         strokeWidth="1.2"
       />
     </svg>

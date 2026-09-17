@@ -16,6 +16,7 @@ import {
   listFavoriteCards,
   refreshCardPricing,
   setFavorite,
+  updateCardNotes,
 } from "../../../services/cards/cardsService.ts";
 import type { CardRecord } from "../../../services/db/types.ts";
 import { getTotalPortfolioValue } from "../../../services/pokewallet/cardmarketPrices.ts";
@@ -130,6 +131,20 @@ export default function CollectionsPage() {
     setDetailCard((prev) => (prev && prev.id === updated.id ? updated : prev));
   };
 
+  const handleUpdateNotes = async (card: CardRecord, notes: string) => {
+    await updateCardNotes(card.id, notes);
+    const trimmed = notes.trim() || null;
+    setCards((prev) =>
+      prev.map((c) => (c.id === card.id ? { ...c, notes: trimmed } : c)),
+    );
+    setAllCards((prev) =>
+      prev.map((c) => (c.id === card.id ? { ...c, notes: trimmed } : c)),
+    );
+    setDetailCard((prev) =>
+      prev && prev.id === card.id ? { ...prev, notes: trimmed } : prev,
+    );
+  };
+
   const handleDeleteCard = async (card: CardRecord) => {
     if (!window.confirm(`Eliminare "${card.name}" dalla collezione?`)) return;
     await deleteCard(card.id);
@@ -143,7 +158,7 @@ export default function CollectionsPage() {
   //  RENDER
   // =================================
   return (
-    <div className="min-h-dvh bg-slate-50 pb-24 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+    <div className="min-h-dvh bg-slate-50 pb-24 text-slate-900 dark:bg-slate-900 dark:text-slate-100 lg:pb-6">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white px-4 pt-6 pb-4 dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-2">
           {view.name !== "collections" && (
@@ -154,9 +169,14 @@ export default function CollectionsPage() {
               <ArrowLeft size={20} />
             </button>
           )}
-          {view.name === "collections" && <Logo size={26} />}
+          {view.name === "collections" && <Logo size={26} className="lg:hidden" />}
           <h1 className="flex items-center gap-2 font-headline text-xl font-bold tracking-tight">
-            {view.name === "collections" && "ScanDex"}
+            {view.name === "collections" && (
+              <span className="lg:hidden">ScanDex</span>
+            )}
+            {view.name === "collections" && (
+              <span className="hidden lg:inline">Collezioni</span>
+            )}
             {view.name === "collection" && view.collection.name}
             {view.name === "favorites" && (
               <>
@@ -168,38 +188,42 @@ export default function CollectionsPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl space-y-4 px-4 pt-4">
+      <main className="mx-auto max-w-6xl px-4 pt-4">
         {view.name === "collections" && (
-          <>
-            <PortfolioHeroSection
-              totalValue={totalValue}
-              cardCount={allCards.length}
-              collectionCount={collections.length}
-            />
-            <CollectionsGridSection
-              collections={collections}
-              showNewCollectionForm={showNewCollection}
-              newCollectionName={newCollectionName}
-              onShowNewCollectionForm={() => setShowNewCollection(true)}
-              onNewCollectionNameChange={setNewCollectionName}
-              onCreateCollection={handleCreateCollection}
-              onCancelNewCollection={() => {
-                setShowNewCollection(false);
-                setNewCollectionName("");
-              }}
-              onSelectCollection={(collection) =>
-                setView({ name: "collection", collection })
-              }
-              onDeleteCollection={handleDeleteCollection}
-              onOpenFavorites={() => setView({ name: "favorites" })}
-            />
-          </>
+          <div className="lg:grid lg:grid-cols-[280px_1fr] lg:items-start lg:gap-6">
+            <div className="lg:sticky lg:top-20">
+              <PortfolioHeroSection
+                totalValue={totalValue}
+                cardCount={allCards.length}
+                collectionCount={collections.length}
+              />
+            </div>
+            <div className="mt-4 lg:mt-0">
+              <CollectionsGridSection
+                collections={collections}
+                showNewCollectionForm={showNewCollection}
+                newCollectionName={newCollectionName}
+                onShowNewCollectionForm={() => setShowNewCollection(true)}
+                onNewCollectionNameChange={setNewCollectionName}
+                onCreateCollection={handleCreateCollection}
+                onCancelNewCollection={() => {
+                  setShowNewCollection(false);
+                  setNewCollectionName("");
+                }}
+                onSelectCollection={(collection) =>
+                  setView({ name: "collection", collection })
+                }
+                onDeleteCollection={handleDeleteCollection}
+                onOpenFavorites={() => setView({ name: "favorites" })}
+              />
+            </div>
+          </div>
         )}
 
         {(view.name === "collection" || view.name === "favorites") && (
           <div className="space-y-3">
             {cards.length > 0 && (
-              <div className="relative">
+              <div className="relative lg:max-w-md">
                 <Search
                   size={16}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -236,6 +260,7 @@ export default function CollectionsPage() {
           onToggleFavorite={handleToggleFavorite}
           onDelete={handleDeleteCard}
           onRefreshPrice={handleRefreshPrice}
+          onUpdateNotes={handleUpdateNotes}
         />
       )}
     </div>

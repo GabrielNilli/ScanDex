@@ -20,10 +20,18 @@ import {
   updateSettings,
   type ThemeMode,
 } from "../../../services/settings/settingsService.ts";
+import {
+  calibrateRateLimit,
+  getRateLimitStatus,
+  type RateLimitStatus,
+} from "../../../services/pokewallet/rateLimitTracker.ts";
 import Logo from "../../ui/Logo.tsx";
 import ThemeSection from "./sections/ThemeSection.tsx";
 import GeneralSection from "./sections/GeneralSection.tsx";
 import StorageSection from "./sections/StorageSection.tsx";
+import ApiUsageSection from "./sections/ApiUsageSection.tsx";
+import RemoteSection from "./sections/RemoteSection.tsx";
+import BackupSection from "./sections/BackupSection.tsx";
 import DangerZoneSection from "./sections/DangerZoneSection.tsx";
 
 // =================================
@@ -37,6 +45,9 @@ export default function SettingsPage() {
   const [collections, setCollections] = useState<CollectionWithCount[]>([]);
   const [stats, setStats] = useState<DbStats | null>(null);
   const [estimate, setEstimate] = useState<StorageEstimateInfo | null>(null);
+  const [rateLimitStatus, setRateLimitStatus] = useState<RateLimitStatus>(() =>
+    getRateLimitStatus(),
+  );
   const [toast, setToast] = useState<{
     text: string;
     type: "success" | "error";
@@ -47,16 +58,19 @@ export default function SettingsPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  useEffect(() => {
-    Promise.all([
+  const refreshStats = async () => {
+    const [cols, dbStats, est] = await Promise.all([
       listCollections(),
       dbService.getStats(),
       getStorageEstimate(),
-    ]).then(([cols, dbStats, est]) => {
-      setCollections(cols);
-      setStats(dbStats);
-      setEstimate(est);
-    });
+    ]);
+    setCollections(cols);
+    setStats(dbStats);
+    setEstimate(est);
+  };
+
+  useEffect(() => {
+    refreshStats();
   }, []);
 
   const handleThemeChange = (value: ThemeMode) => {
@@ -68,6 +82,33 @@ export default function SettingsPage() {
   const handleDefaultCollectionChange = (value: number | "") => {
     setDefaultCollectionId(value);
     updateSettings({ defaultCollectionId: value === "" ? null : value });
+  };
+
+  const handleExported = (cardCount: number) => {
+    showToast(`Backup scaricato (${cardCount} carte).`);
+  };
+
+  const handleImported = async (result: {
+    importedCards: number;
+    skippedCards: number;
+    importedCollections: number;
+  }) => {
+    await refreshStats();
+    showToast(
+      `Importate ${result.importedCards} carte e ${result.importedCollections} collezioni` +
+        (result.skippedCards > 0
+          ? ` (${result.skippedCards} già presenti, saltate).`
+          : "."),
+    );
+  };
+
+  const handleCalibrateRateLimit = (
+    remainingHour: number,
+    remainingDay: number,
+  ) => {
+    calibrateRateLimit(remainingHour, remainingDay);
+    setRateLimitStatus(getRateLimitStatus());
+    showToast("Conteggio chiamate risincronizzato.");
   };
 
   const handleClearAllData = async () => {
@@ -99,7 +140,7 @@ export default function SettingsPage() {
   //  RENDER
   // =================================
   return (
-    <div className="min-h-dvh bg-slate-50 pb-24 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+    <div className="min-h-dvh bg-slate-50 pb-24 text-slate-900 dark:bg-slate-900 dark:text-slate-100 lg:pb-6">
       {toast && (
         <div
           className={`fixed left-4 right-4 top-4 z-50 flex items-center gap-3 rounded-xl border p-4 text-sm shadow-lg sm:left-auto sm:w-96 ${
@@ -119,26 +160,39 @@ export default function SettingsPage() {
 
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white px-4 pt-6 pb-4 dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-2">
-          <Logo size={26} />
+          <Logo size={26} className="lg:hidden" />
           <h1 className="font-headline text-xl font-bold tracking-tight">
             Impostazioni
           </h1>
         </div>
-        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-          Preferenze dell&apos;app e gestione dei dati salvati sul
-          dispositivo.
-        </p>
       </header>
 
-      <main className="mx-auto max-w-lg space-y-4 px-4 pt-4">
-        <ThemeSection theme={theme} onChange={handleThemeChange} />
-        <GeneralSection
-          collections={collections}
-          defaultCollectionId={defaultCollectionId}
-          onDefaultCollectionChange={handleDefaultCollectionChange}
-        />
-        <StorageSection stats={stats} estimate={estimate} />
-        <DangerZoneSection onClearAllData={handleClearAllData} />
+      <main className="mx-auto max-w-lg px-4 pt-4 lg:max-w-4xl">
+        <div className="lg:grid lg:grid-cols-2 lg:gap-4">
+          <div className="space-y-4">
+            <ThemeSection theme={theme} onChange={handleThemeChange} />
+            <GeneralSection
+              collections={collections}
+              defaultCollectionId={defaultCollectionId}
+              onDefaultCollectionChange={handleDefaultCollectionChange}
+            />
+            <StorageSection stats={stats} estimate={estimate} />
+          </div>
+          <div className="mt-4 space-y-4 lg:mt-0">
+            <ApiUsageSection
+              status={rateLimitStatus}
+              onCalibrate={handleCalibrateRateLimit}
+            />
+            <RemoteSection />
+            <BackupSection
+              onExported={handleExported}
+              onImported={handleImported}
+            />
+          </div>
+        </div>
+        <div className="mt-4">
+          <DangerZoneSection onClearAllData={handleClearAllData} />
+        </div>
       </main>
     </div>
   );

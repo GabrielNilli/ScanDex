@@ -83,6 +83,7 @@ async function initDb(): Promise<DbInitResult> {
       image_path TEXT,
       favorite INTEGER NOT NULL DEFAULT 0,
       raw_json TEXT,
+      notes TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -100,15 +101,18 @@ async function initDb(): Promise<DbInitResult> {
     CREATE INDEX IF NOT EXISTS idx_cards_favorite ON cards(favorite);
   `);
 
-  // Migrazione: i database creati prima dell'introduzione di set_id non hanno la colonna.
-  // Va verificata ed eventualmente aggiunta PRIMA di creare l'indice su quella colonna,
-  // altrimenti su un DB preesistente l'indice fallirebbe con "no such column: set_id".
+  // Migrazione: i database creati prima dell'introduzione di queste colonne non le hanno.
+  // set_id va verificato ed eventualmente aggiunto PRIMA di creare l'indice su quella
+  // colonna, altrimenti su un DB preesistente l'indice fallirebbe con "no such column".
   const cardColumns = db.selectObjects("PRAGMA table_info(cards);");
-  const hasSetId = cardColumns.some(
-    (c: { name: string }) => c.name === "set_id",
+  const columnNames = new Set(
+    cardColumns.map((c: { name: string }) => c.name),
   );
-  if (!hasSetId) {
+  if (!columnNames.has("set_id")) {
     db.exec("ALTER TABLE cards ADD COLUMN set_id TEXT;");
+  }
+  if (!columnNames.has("notes")) {
+    db.exec("ALTER TABLE cards ADD COLUMN notes TEXT;");
   }
   db.exec("CREATE INDEX IF NOT EXISTS idx_cards_set_id ON cards(set_id);");
 

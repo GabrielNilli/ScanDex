@@ -23,6 +23,7 @@ export interface CardRecord {
   image_path: string | null; // Percorso del file in OPFS, es: "images/pk_xxx.jpg"
   favorite: number; // 0 o 1 (SQLite non ha un booleano nativo)
   raw_json: string | null; // Risposta grezza dell'API pokewallet per quel risultato
+  notes: string | null; // Nota libera dell'utente su questa carta
   created_at?: string;
 }
 
