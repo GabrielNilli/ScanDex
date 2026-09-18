@@ -2,7 +2,7 @@
 //  IMPORTS
 // =================================
 import { useState } from "react";
-import { Gauge, RefreshCw } from "lucide-react";
+import { ExternalLink, Gauge, RefreshCw } from "lucide-react";
 import type { RateLimitStatus } from "../../../../services/pokewallet/rateLimitTracker.ts";
 
 // =================================
@@ -52,49 +52,61 @@ export default function ApiUsageSection({
         />
       </div>
 
-      {!showCalibrate ? (
-        <button
-          onClick={() => setShowCalibrate(true)}
-          className="mt-3 flex items-center gap-1.5 text-[11px] font-medium text-amber-600 hover:underline dark:text-amber-400"
+      <div className="mt-3 space-y-2">
+        <a
+          href="https://pokewallet.io/dashboard"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-[11px] font-medium text-amber-600 hover:underline dark:text-amber-400"
         >
-          <RefreshCw size={11} />
-          Risincronizza manualmente
-        </button>
-      ) : (
-        <div className="mt-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-700">
-          <div className="flex gap-2">
-            <input
-              type="number"
-              value={hourInput}
-              onChange={(e) => setHourInput(e.target.value)}
-              placeholder="Rimaste ora"
-              className="w-1/2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-            />
-            <input
-              type="number"
-              value={dayInput}
-              onChange={(e) => setDayInput(e.target.value)}
-              placeholder="Rimaste oggi"
-              className="w-1/2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
-            />
+          <ExternalLink size={11} />
+          Vedi le rimanenze sul dashboard PokeWallet
+        </a>
+
+        {!showCalibrate ? (
+          <button
+            onClick={() => setShowCalibrate(true)}
+            className="flex items-center gap-1.5 text-[11px] font-medium text-amber-600 hover:underline dark:text-amber-400"
+          >
+            <RefreshCw size={11} />
+            Risincronizza manualmente
+          </button>
+        ) : (
+          <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-700">
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={hourInput}
+                onChange={(e) => setHourInput(e.target.value)}
+                placeholder="Rimaste ora"
+                className="w-1/2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+              />
+              <input
+                type="number"
+                value={dayInput}
+                onChange={(e) => setDayInput(e.target.value)}
+                placeholder="Rimaste oggi"
+                className="w-1/2 rounded-lg border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800"
+              />
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={handleCalibrate}
+                disabled={hourInput === "" || dayInput === ""}
+                className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-40"
+              >
+                Sincronizza
+              </button>
+              <button
+                onClick={() => setShowCalibrate(false)}
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-600"
+              >
+                Annulla
+              </button>
+            </div>
           </div>
-          <div className="mt-2 flex gap-2">
-            <button
-              onClick={handleCalibrate}
-              disabled={hourInput === "" || dayInput === ""}
-              className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-40"
-            >
-              Sincronizza
-            </button>
-            <button
-              onClick={() => setShowCalibrate(false)}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-600"
-            >
-              Annulla
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }

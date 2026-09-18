@@ -7,17 +7,19 @@ import {
   ArrowLeft,
   Check,
   ExternalLink,
+  Layers,
   RefreshCw,
   Star,
   StickyNote,
   Trash2,
 } from "lucide-react";
 import type { CardRecord } from "../../services/db/types.ts";
+import type { CollectionWithCount } from "../../services/collections/collectionsService.ts";
 import {
   formatPrice,
   getCardmarketData,
 } from "../../services/pokewallet/cardmarketPrices.ts";
-import OpfsImage from "../ui/OpfsImage.tsx";
+import HoloCardImage from "./HoloCardImage.tsx";
 
 const VARIANT_LABELS: Record<string, string> = {
   normal: "Normale",
@@ -50,18 +52,25 @@ function formatUpdatedAt(isoDate: string): string {
 // =================================
 export default function CardDetailSection({
   card,
+  collections,
   onClose,
   onToggleFavorite,
   onDelete,
   onRefreshPrice,
   onUpdateNotes,
+  onMoveToCollection,
 }: {
   card: CardRecord;
+  collections: CollectionWithCount[];
   onClose: () => void;
   onToggleFavorite: (card: CardRecord) => void;
   onDelete: (card: CardRecord) => void;
   onRefreshPrice: (card: CardRecord) => Promise<void>;
   onUpdateNotes: (card: CardRecord, notes: string) => Promise<void>;
+  onMoveToCollection: (
+    card: CardRecord,
+    collectionId: number | null,
+  ) => Promise<void>;
 }) {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -90,7 +99,7 @@ export default function CardDetailSection({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-slate-50 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-xl dark:bg-slate-900 sm:rounded-2xl sm:pb-5"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-slate-50 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-xl dark:bg-slate-900 sm:rounded-2xl sm:pb-5 lg:max-w-4xl"
       >
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-700 dark:bg-slate-800 sm:rounded-t-2xl">
           <button
@@ -123,8 +132,8 @@ export default function CardDetailSection({
           </div>
         </div>
 
-        <div className="p-4">
-          <div className="relative rounded-2xl bg-slate-100 p-4 dark:bg-slate-800">
+        <div className="p-4 lg:grid lg:grid-cols-[340px_1fr] lg:items-start lg:gap-8 lg:p-6">
+          <div className="relative rounded-2xl bg-slate-100 p-4 dark:bg-slate-800 lg:sticky lg:top-4">
             {card.rarity && (
               <span className="absolute right-4 top-4 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
                 {card.rarity}
@@ -140,22 +149,30 @@ export default function CardDetailSection({
             </p>
 
             <div className="mt-4 flex justify-center">
-              <OpfsImage
+              <HoloCardImage
                 path={card.image_path}
                 alt={card.name}
-                className="h-72 rounded-xl object-cover shadow-md"
+                className="h-72 rounded-xl shadow-md lg:h-auto lg:w-full lg:aspect-[63/88]"
               />
             </div>
           </div>
 
-          <CardmarketPricesSection
-            card={card}
-            refreshing={refreshing}
-            refreshError={refreshError}
-            onRefresh={handleRefresh}
-          />
+          <div>
+            <CardmarketPricesSection
+              card={card}
+              refreshing={refreshing}
+              refreshError={refreshError}
+              onRefresh={handleRefresh}
+            />
 
-          <CardNotesSection card={card} onUpdateNotes={onUpdateNotes} />
+            <CardCollectionSection
+              card={card}
+              collections={collections}
+              onMoveToCollection={onMoveToCollection}
+            />
+
+            <CardNotesSection card={card} onUpdateNotes={onUpdateNotes} />
+          </div>
         </div>
       </div>
     </div>
@@ -181,7 +198,7 @@ function CardmarketPricesSection({
     .at(-1);
 
   return (
-    <div className="mt-3 rounded-2xl bg-white p-4 dark:bg-slate-800">
+    <div className="mt-3 rounded-2xl bg-white p-4 dark:bg-slate-800 lg:mt-0">
       <div className="flex items-start justify-between gap-2">
         <div>
           <h4 className="font-headline text-sm font-bold">Prezzi CardMarket</h4>
@@ -261,6 +278,55 @@ function PriceStat({ label, value }: { label: string; value: number | null }) {
       <span className="text-[11px] font-medium text-slate-700 dark:text-slate-200">
         {formatPrice(value)}
       </span>
+    </div>
+  );
+}
+
+function CardCollectionSection({
+  card,
+  collections,
+  onMoveToCollection,
+}: {
+  card: CardRecord;
+  collections: CollectionWithCount[];
+  onMoveToCollection: (
+    card: CardRecord,
+    collectionId: number | null,
+  ) => Promise<void>;
+}) {
+  const [moving, setMoving] = useState(false);
+
+  const handleChange = async (collectionId: number | null) => {
+    if (collectionId === card.collection_id) return;
+    setMoving(true);
+    try {
+      await onMoveToCollection(card, collectionId);
+    } finally {
+      setMoving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-2xl bg-white p-4 dark:bg-slate-800">
+      <h4 className="font-headline flex items-center gap-1.5 text-sm font-bold">
+        <Layers size={14} className="text-slate-400" />
+        Collezione
+      </h4>
+      <select
+        value={card.collection_id ?? ""}
+        onChange={(e) =>
+          handleChange(e.target.value === "" ? null : Number(e.target.value))
+        }
+        disabled={moving}
+        className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+      >
+        <option value="">Nessuna collezione</option>
+        {collections.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

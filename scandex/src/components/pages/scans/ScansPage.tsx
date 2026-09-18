@@ -17,12 +17,35 @@ import {
 } from "../../../services/collections/collectionsService.ts";
 import {
   getStatus as getRemoteStatus,
+  notifyCardSaved,
+  onCaptureRequested,
+  onCardSaved,
+  onFieldsUpdateRequested,
+  onFocusRequested,
+  onRemoteVideoStream,
+  onRetakeRequested,
+  onReviewRequested,
+  onScanProgress,
+  onSearchRequested,
+  requestCapture,
+  requestFocus,
+  requestRetake,
+  requestReview,
+  requestSearch,
   sendScan,
+  sendScanProgress,
+  startVideoCall,
+  stopVideoCall,
   subscribeStatus as subscribeRemoteStatus,
+  updateRemoteFields,
+  type RemoteScanProgress,
   type RemoteStatus,
 } from "../../../services/remote/remoteService.ts";
+import { enableContinuousFocus, focusAtPoint } from "./lib/cameraFocus.ts";
 import { canvasToBlob, computeCropRect } from "./lib/cropImage.ts";
 import CameraStepSection from "./sections/CameraStepSection.tsx";
+import RemoteCameraStepSection from "./sections/RemoteCameraStepSection.tsx";
+import RemoteScanMirrorSection from "./sections/RemoteScanMirrorSection.tsx";
 import LoadingStepSection from "./sections/LoadingStepSection.tsx";
 import ReviewStepSection from "./sections/ReviewStepSection.tsx";
 import ChooseResultStepSection from "./sections/ChooseResultStepSection.tsx";
@@ -57,6 +80,7 @@ export default function ScansPage() {
   // --- Wizard ---
   const [step, setStep] = useState<Step>("camera");
   const [capturedUrl, setCapturedUrl] = useState<string | null>(null);
+  const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
   const [ocrRawText, setOcrRawText] = useState<string>("");
   const [cardName, setCardName] = useState<string>("");
   const [cardNumber, setCardNumber] = useState<string>("");
@@ -81,15 +105,87 @@ export default function ScansPage() {
   );
   const [remoteCollectionName, setRemoteCollectionName] = useState<string>("");
   const isRemoteClient = remoteStatus.role === "client" && remoteStatus.connected;
+  const isRemoteHost = remoteStatus.role === "host" && remoteStatus.connected;
   // Congela l'esito al momento del salvataggio: se la connessione cade subito dopo
   // un invio riuscito, la schermata finale non deve cambiare messaggio a posteriori.
   const [lastSaveWasRemote, setLastSaveWasRemote] = useState(false);
 
+  // --- Anteprima remota (questo PC collegato a un telefono, vedi Impostazioni) ---
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
+  const [remoteProgress, setRemoteProgress] = useState<RemoteScanProgress | null>(
+    null,
+  );
+  const [remotePreviewUrl, setRemotePreviewUrl] = useState<string | null>(null);
+  const [remoteResultUrl, setRemoteResultUrl] = useState<string | null>(null);
+  // Copia locale di nome/numero editabile dal PC durante lo step "review" del
+  // telefono: si aggiorna sia qui che sul telefono ad ogni modifica.
+  const [hostCardName, setHostCardName] = useState("");
+  const [hostCardNumber, setHostCardNumber] = useState("");
+  const [hostSaveError, setHostSaveError] = useState<string | null>(null);
+  const [hostSaving, setHostSaving] = useState(false);
+
   useEffect(() => subscribeRemoteStatus(setRemoteStatus), []);
 
-  // Avvio/stop della fotocamera in base allo step corrente
+  useEffect(
+    () =>
+      onRemoteVideoStream((stream) => {
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream;
+        setHasRemoteVideo(Boolean(stream));
+      }),
+    [],
+  );
+
+  // Rispecchia sul PC i dettagli del wizard di scansione in corso sul telefono.
+  useEffect(
+    () =>
+      onScanProgress((progress) => {
+        setRemoteProgress(progress);
+        setRemotePreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return progress.previewImageBlob
+            ? URL.createObjectURL(progress.previewImageBlob)
+            : null;
+        });
+        setRemoteResultUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return progress.resultImageBlob
+            ? URL.createObjectURL(progress.resultImageBlob)
+            : null;
+        });
+      }),
+    [],
+  );
+
+  // Quando il telefono entra nello step "review", inizializza i campi
+  // editabili sul PC con la lettura OCR del telefono.
   useEffect(() => {
-    if (step !== "camera") return;
+    if (remoteProgress?.step === "review") {
+      setHostCardName(remoteProgress.cardName);
+      setHostCardNumber(remoteProgress.cardNumber);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteProgress?.step]);
+
+  // Ad ogni cambio di step del telefono, l'eventuale stato di salvataggio
+  // precedente sul PC (errore o "in corso") non è più valido.
+  useEffect(() => {
+    setHostSaveError(null);
+    setHostSaving(false);
+  }, [remoteProgress?.step]);
+
+  // Tenuto aggiornato senza essere una dipendenza dell'effetto della fotocamera
+  // qui sotto: collegarsi/scollegarsi dal PC non deve riavviare lo stream locale.
+  const isRemoteClientRef = useRef(isRemoteClient);
+  useEffect(() => {
+    isRemoteClientRef.current = isRemoteClient;
+  }, [isRemoteClient]);
+
+  // Avvio/stop della fotocamera in base allo step corrente. Se il PC è
+  // collegato a un telefono, si usa l'anteprima remota di lui: non ha senso
+  // aprire anche la webcam del PC.
+  useEffect(() => {
+    if (step !== "camera" || isRemoteHost) return;
     let cancelled = false;
 
     async function startCamera() {
@@ -112,6 +208,15 @@ export default function ScansPage() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
+        // Se siamo collegati a un PC, condividi anche a lui l'anteprima live,
+        // così può vedere cosa inquadra il telefono prima di chiedere lo scatto.
+        if (isRemoteClientRef.current) {
+          startVideoCall(stream);
+        }
+        // Dove supportato (Chrome/Android), forza il fuoco automatico continuo
+        // invece di lasciare al browser una modalità qualunque scelta di default.
+        const track = stream.getVideoTracks()[0];
+        if (track) void enableContinuousFocus(track);
         // Piccola attesa per lasciare che la messa a fuoco/esposizione automatica
         // si stabilizzi prima di permettere lo scatto (altrimenti la prima foto è spesso mossa/sfocata).
         await new Promise((resolve) => setTimeout(resolve, 700));
@@ -130,8 +235,9 @@ export default function ScansPage() {
       cancelled = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+      stopVideoCall();
     };
-  }, [step]);
+  }, [step, isRemoteHost]);
 
   // Pulizia degli Object URL creati
   useEffect(() => {
@@ -142,9 +248,10 @@ export default function ScansPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Carica l'elenco delle collezioni quando si entra nello step di conferma
+  // Carica l'elenco delle collezioni quando si entra nello step di conferma,
+  // sia in locale che quando il PC mostra la conferma di un telefono collegato.
   useEffect(() => {
-    if (step !== "confirm") return;
+    if (step !== "confirm" && remoteProgress?.step !== "confirm") return;
     listCollections()
       .then((list) => {
         setCollections(list);
@@ -153,7 +260,7 @@ export default function ScansPage() {
         );
       })
       .catch((err) => console.warn("Errore caricamento collezioni:", err));
-  }, [step]);
+  }, [step, remoteProgress?.step]);
 
   const runOcr = useCallback(async (source: Blob | HTMLCanvasElement) => {
     setStep("ocr");
@@ -182,6 +289,20 @@ export default function ScansPage() {
     if (!video || !guide || !canvas || video.videoWidth === 0) return;
 
     const { sx, sy, sw, sh } = computeCropRect(video, guide);
+
+    // Rinfresca il fuoco esattamente sul centro del riquadro guida appena
+    // prima di scattare: se l'autofocus continuo avesse "vagato" nel
+    // frattempo, la foto risulta comunque a fuoco sulla carta.
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (track) {
+      await focusAtPoint(
+        track,
+        (sx + sw / 2) / video.videoWidth,
+        (sy + sh / 2) / video.videoHeight,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
     canvas.width = sw;
     canvas.height = sh;
     const ctx = canvas.getContext("2d");
@@ -193,12 +314,125 @@ export default function ScansPage() {
     const blob = await canvasToBlob(canvas);
     const url = URL.createObjectURL(blob);
     setCapturedUrl(url);
+    setCapturedBlob(blob);
 
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
 
     await runOcr(canvas);
   }, [runOcr]);
+
+  // "Tocca per mettere a fuoco": ridà il controllo del punto di fuoco
+  // all'utente quando l'autofocus non converge da solo sulla carta.
+  const handleFocusTap = (xFraction: number, yFraction: number) => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (track) void focusAtPoint(track, xFraction, yFraction);
+  };
+
+  // Scatto richiesto dal PC collegato (vedi RemoteSection): riusa lo stesso
+  // scatto manuale, ma solo se siamo effettivamente pronti a fotografare.
+  useEffect(() => {
+    if (!isRemoteClient) return;
+    return onCaptureRequested(() => {
+      if (step === "camera" && cameraReady && !cameraError) {
+        handleCapture();
+      }
+    });
+  }, [isRemoteClient, step, cameraReady, cameraError, handleCapture]);
+
+  // Manda al PC collegato un'istantanea di questo step del wizard, così può
+  // mostrare gli stessi dettagli. Si aggancia ai cambi di step (non ad ogni
+  // modifica di un campo) perché ogni handler aggiorna già tutti i dati
+  // rilevanti prima di cambiare step, quindi un invio per step basta ed evita
+  // di rimandare le immagini ad ogni tocco sulla tastiera.
+  useEffect(() => {
+    if (!isRemoteClient) return;
+    sendScanProgress({
+      step,
+      previewImageBlob: capturedBlob,
+      cardName,
+      cardNumber,
+      ocrRawText,
+      errorMessage,
+      results: searchResults,
+      selectedResult,
+      resultImageBlob,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRemoteClient, step, resultImageBlob]);
+
+  // Solo lato "host" (PC): chiede al telefono collegato di scattare ora.
+  const handleRequestCapture = () => {
+    requestCapture().catch(() => {
+      // Connessione caduta proprio ora: lo stato si aggiornerà da solo
+      // tramite l'evento "close" della connessione.
+    });
+  };
+
+  // Solo lato "host" (PC): chiede al telefono di mettere a fuoco il punto
+  // toccato sull'anteprima live.
+  const handleRequestFocus = (xFraction: number, yFraction: number) => {
+    requestFocus(xFraction, yFraction);
+  };
+
+  // Solo lato "host" (PC): controlli della revisione mostrata "come sul
+  // telefono", che sincronizzano le modifiche sul telefono collegato.
+  const handleHostCardNameChange = (value: string) => {
+    setHostCardName(value);
+    updateRemoteFields(value, hostCardNumber);
+  };
+
+  const handleHostCardNumberChange = (value: string) => {
+    setHostCardNumber(value);
+    updateRemoteFields(hostCardName, value);
+  };
+
+  const handleRequestRetake = () => {
+    requestRetake().catch(() => {
+      // Connessione caduta proprio ora: lo stato si aggiornerà da solo.
+    });
+  };
+
+  const handleRequestSearch = () => {
+    requestSearch().catch(() => {
+      // Connessione caduta proprio ora: lo stato si aggiornerà da solo.
+    });
+  };
+
+  const handleHostCancelConfirm = () => {
+    requestReview().catch(() => {
+      // Connessione caduta proprio ora: lo stato si aggiornerà da solo.
+    });
+  };
+
+  // Solo lato "host" (PC): salva direttamente nel proprio database locale la
+  // carta confermata dal telefono (foto e dati sono già arrivati con
+  // l'istantanea di progresso), poi avvisa il telefono che è fatta.
+  const handleHostSaveConfirmedCard = async () => {
+    if (
+      hostSaving ||
+      !remoteProgress?.selectedResult ||
+      !remoteProgress.resultImageBlob
+    ) {
+      return;
+    }
+    setHostSaveError(null);
+    setHostSaving(true);
+    try {
+      await saveScannedCard({
+        collectionId: targetCollectionId === "" ? null : targetCollectionId,
+        result: remoteProgress.selectedResult,
+        imageBlob: remoteProgress.resultImageBlob,
+      });
+      notifyCardSaved();
+    } catch (err) {
+      console.error("Errore salvataggio carta remota:", err);
+      setHostSaveError(
+        err instanceof Error ? err.message : "Errore durante il salvataggio.",
+      );
+      setHostSaving(false);
+    }
+  };
 
   const handleRetake = () => {
     if (capturedUrl) URL.revokeObjectURL(capturedUrl);
@@ -252,6 +486,51 @@ export default function ScansPage() {
       );
     }
   };
+
+  // Rifai foto / avvia ricerca / modifica campi / annulla conferma / conferma
+  // salvata, tutti richiesti dal PC collegato: ognuno agisce solo nello step
+  // in cui ha senso, per evitare comandi fuori tempo massimo per via della
+  // latenza di rete.
+  useEffect(() => {
+    if (!isRemoteClient) return;
+    const offRetake = onRetakeRequested(() => {
+      if (step === "review") handleRetake();
+    });
+    const offSearch = onSearchRequested(() => {
+      if (step === "review") handleSearch();
+    });
+    const offFields = onFieldsUpdateRequested((fields) => {
+      if (step === "review") {
+        setCardName(fields.cardName);
+        setCardNumber(fields.cardNumber);
+      }
+    });
+    const offReview = onReviewRequested(() => {
+      if (step === "confirm") setStep("review");
+    });
+    const offSaved = onCardSaved(() => {
+      if (step === "confirm") {
+        setLastSaveWasRemote(true);
+        setStep("done");
+      }
+    });
+    const offFocus = onFocusRequested(({ x, y }) => {
+      if (step !== "camera") return;
+      const track = streamRef.current?.getVideoTracks()[0];
+      if (track) void focusAtPoint(track, x, y);
+    });
+    return () => {
+      offRetake();
+      offSearch();
+      offFields();
+      offReview();
+      offSaved();
+      offFocus();
+    };
+    // handleRetake/handleSearch non sono memoizzate: si riaggancia la
+    // sottoscrizione ad ogni render, costo trascurabile per un Set locale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRemoteClient, step, handleRetake, handleSearch]);
 
   const handleCreateCollection = async () => {
     if (!newCollectionName.trim()) return;
@@ -336,18 +615,71 @@ export default function ScansPage() {
             Collegato al PC: le carte verranno inviate lì
           </p>
         )}
+        {isRemoteHost && (
+          <p className="mt-1.5 flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+            <Wifi size={12} />
+            Telefono collegato: qui sotto vedi la sua anteprima
+          </p>
+        )}
       </header>
 
       <main className="mx-auto max-w-lg px-4 pt-4">
-        {step === "camera" && (
-          <CameraStepSection
-            videoRef={videoRef}
-            guideRef={guideRef}
-            cameraError={cameraError}
-            cameraReady={cameraReady}
-            onCapture={handleCapture}
-          />
-        )}
+        {step === "camera" &&
+          (isRemoteHost ? (
+            remoteProgress && remoteProgress.step === "review" ? (
+              <ReviewStepSection
+                capturedUrl={remotePreviewUrl}
+                cardName={hostCardName}
+                cardNumber={hostCardNumber}
+                ocrRawText={remoteProgress.ocrRawText}
+                errorMessage={remoteProgress.errorMessage}
+                onCardNameChange={handleHostCardNameChange}
+                onCardNumberChange={handleHostCardNumberChange}
+                onRetake={handleRequestRetake}
+                onSearch={handleRequestSearch}
+              />
+            ) : remoteProgress &&
+              remoteProgress.step === "confirm" &&
+              remoteProgress.selectedResult ? (
+              <ConfirmStepSection
+                result={remoteProgress.selectedResult}
+                imageUrl={remoteResultUrl}
+                imageReady={Boolean(remoteProgress.resultImageBlob) && !hostSaving}
+                errorMessage={hostSaveError ?? remoteProgress.errorMessage}
+                collections={collections}
+                targetCollectionId={targetCollectionId}
+                newCollectionName={newCollectionName}
+                creatingCollection={creatingCollection}
+                onTargetCollectionChange={setTargetCollectionId}
+                onNewCollectionNameChange={setNewCollectionName}
+                onCreateCollection={handleCreateCollection}
+                onCancel={handleHostCancelConfirm}
+                onSave={handleHostSaveConfirmedCard}
+              />
+            ) : remoteProgress && remoteProgress.step !== "camera" ? (
+              <RemoteScanMirrorSection
+                progress={remoteProgress}
+                previewUrl={remotePreviewUrl}
+                resultUrl={remoteResultUrl}
+              />
+            ) : (
+              <RemoteCameraStepSection
+                videoRef={remoteVideoRef}
+                hasStream={hasRemoteVideo}
+                onRequestCapture={handleRequestCapture}
+                onFocusTap={handleRequestFocus}
+              />
+            )
+          ) : (
+            <CameraStepSection
+              videoRef={videoRef}
+              guideRef={guideRef}
+              cameraError={cameraError}
+              cameraReady={cameraReady}
+              onCapture={handleCapture}
+              onFocusTap={handleFocusTap}
+            />
+          ))}
 
         {step === "ocr" && (
           <LoadingStepSection

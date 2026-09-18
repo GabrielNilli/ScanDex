@@ -7,10 +7,15 @@ import {
   deleteCard,
   getCardCountsBySetId,
   listCardsBySetId,
+  moveCardToCollection,
   refreshCardPricing,
   setFavorite,
   updateCardNotes,
 } from "../../../services/cards/cardsService.ts";
+import {
+  listCollections,
+  type CollectionWithCount,
+} from "../../../services/collections/collectionsService.ts";
 import type { CardRecord, SetRecord } from "../../../services/db/types.ts";
 import {
   buildSetProgressList,
@@ -40,6 +45,13 @@ export default function SetsPage() {
   const [setCards, setSetCards] = useState<CardRecord[]>([]);
   const [loadingSetCards, setLoadingSetCards] = useState(false);
   const [detailCard, setDetailCard] = useState<CardRecord | null>(null);
+  const [collections, setCollections] = useState<CollectionWithCount[]>([]);
+
+  useEffect(() => {
+    listCollections()
+      .then(setCollections)
+      .catch((err) => console.warn("Errore caricamento collezioni:", err));
+  }, []);
 
   const loadData = useCallback(async (forceRefresh = false) => {
     setErrorMessage(null);
@@ -115,6 +127,26 @@ export default function SetsPage() {
     setDetailCard((prev) =>
       prev && prev.id === card.id ? { ...prev, notes: trimmed } : prev,
     );
+  };
+
+  const handleMoveToCollection = async (
+    card: CardRecord,
+    collectionId: number | null,
+  ) => {
+    await moveCardToCollection(card.id, collectionId);
+    setSetCards((prev) =>
+      prev.map((c) =>
+        c.id === card.id ? { ...c, collection_id: collectionId } : c,
+      ),
+    );
+    setDetailCard((prev) =>
+      prev && prev.id === card.id
+        ? { ...prev, collection_id: collectionId }
+        : prev,
+    );
+    listCollections()
+      .then(setCollections)
+      .catch((err) => console.warn("Errore caricamento collezioni:", err));
   };
 
   const handleDeleteCard = async (card: CardRecord) => {
@@ -196,11 +228,13 @@ export default function SetsPage() {
       {detailCard && (
         <CardDetailSection
           card={detailCard}
+          collections={collections}
           onClose={() => setDetailCard(null)}
           onToggleFavorite={handleToggleFavorite}
           onDelete={handleDeleteCard}
           onRefreshPrice={handleRefreshPrice}
           onUpdateNotes={handleUpdateNotes}
+          onMoveToCollection={handleMoveToCollection}
         />
       )}
     </div>

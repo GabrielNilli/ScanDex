@@ -1,7 +1,7 @@
 // =================================
 //  IMPORTS
 // =================================
-import { Heart, Layers, Plus, Trash2, X } from "lucide-react";
+import { Heart, LayoutGrid, Layers, Plus, Trash2, X } from "lucide-react";
 import type { CollectionWithCount } from "../../../../services/collections/collectionsService.ts";
 
 // =================================
@@ -18,6 +18,7 @@ export default function CollectionsGridSection({
   onSelectCollection,
   onDeleteCollection,
   onOpenFavorites,
+  onOpenAll,
 }: {
   collections: CollectionWithCount[];
   showNewCollectionForm: boolean;
@@ -29,27 +30,37 @@ export default function CollectionsGridSection({
   onSelectCollection: (collection: CollectionWithCount) => void;
   onDeleteCollection: (collection: CollectionWithCount) => void;
   onOpenFavorites: () => void;
+  onOpenAll: () => void;
 }) {
   // =================================
   //  RENDER
   // =================================
   return (
-    <div className="space-y-4">
-      <div className="flex gap-2 lg:max-w-md">
+    <div className="space-y-6">
+      <div className="space-y-2.5 lg:max-w-md">
         <button
           onClick={onShowNewCollectionForm}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-500"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-amber-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-500"
         >
           <Plus size={16} />
           Nuova collezione
         </button>
-        <button
-          onClick={onOpenFavorites}
-          className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-        >
-          <Heart size={16} />
-          Preferiti
-        </button>
+        <div className="grid grid-cols-2 gap-2.5">
+          <button
+            onClick={onOpenAll}
+            className="flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            <LayoutGrid size={16} />
+            Tutti gli scans
+          </button>
+          <button
+            onClick={onOpenFavorites}
+            className="flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+          >
+            <Heart size={16} />
+            Preferiti
+          </button>
+        </div>
       </div>
 
       {showNewCollectionForm && (
@@ -91,36 +102,41 @@ export default function CollectionsGridSection({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {collections.map((collection) => (
-            <div
-              key={collection.id}
-              className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
-            >
-              <button
-                onClick={() => onSelectCollection(collection)}
-                className="flex flex-1 flex-col p-4 text-left"
+        <div>
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+            Le tue collezioni
+          </h3>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
+            {collections.map((collection) => (
+              <div
+                key={collection.id}
+                className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
               >
-                <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400">
-                  <Layers size={22} />
-                </div>
-                <h4 className="line-clamp-1 text-sm font-semibold">
-                  {collection.name}
-                </h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {collection.cardCount}{" "}
-                  {collection.cardCount === 1 ? "carta" : "carte"}
-                </p>
-              </button>
-              <button
-                onClick={() => onDeleteCollection(collection)}
-                className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-slate-400 shadow-sm transition-colors hover:text-red-600 dark:bg-slate-700/90"
-                title="Elimina collezione"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
+                <button
+                  onClick={() => onSelectCollection(collection)}
+                  className="flex flex-1 flex-col p-5 text-left sm:p-6"
+                >
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400">
+                    <Layers size={24} />
+                  </div>
+                  <h4 className="line-clamp-1 text-base font-semibold">
+                    {collection.name}
+                  </h4>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                    {collection.cardCount}{" "}
+                    {collection.cardCount === 1 ? "carta" : "carte"}
+                  </p>
+                </button>
+                <button
+                  onClick={() => onDeleteCollection(collection)}
+                  className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-slate-400 shadow-sm transition-colors hover:text-red-600 dark:bg-slate-700/90"
+                  title="Elimina collezione"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

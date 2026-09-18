@@ -1,7 +1,7 @@
 // =================================
 //  IMPORTS
 // =================================
-import type { RefObject } from "react";
+import { useState, type MouseEvent, type RefObject } from "react";
 import { AlertTriangle, Camera, Loader2 } from "lucide-react";
 
 // =================================
@@ -13,19 +13,37 @@ export default function CameraStepSection({
   cameraError,
   cameraReady,
   onCapture,
+  onFocusTap,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   guideRef: RefObject<HTMLDivElement | null>;
   cameraError: string | null;
   cameraReady: boolean;
   onCapture: () => void;
+  onFocusTap: (xFraction: number, yFraction: number) => void;
 }) {
+  const [focusMark, setFocusMark] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+
+  const handleTap = (e: MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    onFocusTap(x, y);
+    setFocusMark({ x: x * 100, y: y * 100 });
+    setTimeout(() => setFocusMark(null), 700);
+  };
+
   // =================================
   //  RENDER
   // =================================
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-black">
+      <div
+        onClick={handleTap}
+        className="relative aspect-[3/4] w-full cursor-crosshair overflow-hidden rounded-2xl bg-black"
+      >
         <video
           ref={videoRef}
           autoPlay
@@ -45,9 +63,15 @@ export default function CameraStepSection({
             <span className="absolute -bottom-0.5 -right-0.5 h-6 w-6 rounded-br-lg border-b-2 border-r-2 border-amber-400" />
           </div>
         </div>
+        {focusMark && (
+          <div
+            className="pointer-events-none absolute h-14 w-14 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full border-2 border-amber-400"
+            style={{ left: `${focusMark.x}%`, top: `${focusMark.y}%` }}
+          />
+        )}
         <p className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-1.5 text-center text-xs font-medium text-white drop-shadow">
           {cameraReady ? (
-            "Posiziona la carta dentro il riquadro"
+            "Posiziona la carta dentro il riquadro. Tocca per mettere a fuoco."
           ) : (
             <>
               <Loader2 size={12} className="animate-spin" />

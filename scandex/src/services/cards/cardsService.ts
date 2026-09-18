@@ -193,6 +193,19 @@ export async function refreshCardPricing(id: number): Promise<CardRecord> {
 }
 
 /**
+ * Sposta una carta in un'altra collezione (o la rende senza collezione con null).
+ */
+export async function moveCardToCollection(
+  id: number,
+  collectionId: number | null,
+): Promise<void> {
+  await dbService.exec("UPDATE cards SET collection_id = ? WHERE id = ?", [
+    collectionId,
+    id,
+  ]);
+}
+
+/**
  * Elimina una carta e la relativa immagine salvata in OPFS.
  */
 export async function deleteCard(id: number): Promise<void> {

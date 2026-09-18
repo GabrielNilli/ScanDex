@@ -91,6 +91,13 @@ export default function RemoteSection() {
             </span>
           </div>
 
+          {status.role === "host" && status.connected && (
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Vai alla pagina "Scansiona carta" per vedere l'anteprima del
+              telefono e scattare da qui.
+            </p>
+          )}
+
           {status.role === "host" && status.code && (
             <div className="rounded-xl bg-slate-50 p-3 text-center dark:bg-slate-700">
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
