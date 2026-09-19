@@ -27,11 +27,13 @@ import {
   onReviewRequested,
   onScanProgress,
   onSearchRequested,
+  onSelectResultRequested,
   requestCapture,
   requestFocus,
   requestRetake,
   requestReview,
   requestSearch,
+  requestSelectResult,
   sendScan,
   sendScanProgress,
   startVideoCall,
@@ -81,6 +83,8 @@ export default function ScansPage() {
   const [step, setStep] = useState<Step>("camera");
   const [capturedUrl, setCapturedUrl] = useState<string | null>(null);
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
+  // true quando si è arrivati allo step "review" cercando a mano, senza foto.
+  const [isManualEntry, setIsManualEntry] = useState(false);
   const [ocrRawText, setOcrRawText] = useState<string>("");
   const [cardName, setCardName] = useState<string>("");
   const [cardNumber, setCardNumber] = useState<string>("");
@@ -315,6 +319,7 @@ export default function ScansPage() {
     const url = URL.createObjectURL(blob);
     setCapturedUrl(url);
     setCapturedBlob(blob);
+    setIsManualEntry(false);
 
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
@@ -399,8 +404,18 @@ export default function ScansPage() {
     });
   };
 
-  const handleHostCancelConfirm = () => {
+  // Riporta il telefono allo step "review": usato sia per annullare la
+  // conferma sia per tornare indietro dalla scelta tra più risultati.
+  const handleHostRequestBackToReview = () => {
     requestReview().catch(() => {
+      // Connessione caduta proprio ora: lo stato si aggiornerà da solo.
+    });
+  };
+
+  // Solo lato "host" (PC): sceglie per il telefono uno dei risultati trovati
+  // quando la ricerca ne ha dati più d'uno.
+  const handleRequestSelectResult = (result: PokewalletSearchResult) => {
+    requestSelectResult(result.id).catch(() => {
       // Connessione caduta proprio ora: lo stato si aggiornerà da solo.
     });
   };
@@ -438,7 +453,19 @@ export default function ScansPage() {
     if (capturedUrl) URL.revokeObjectURL(capturedUrl);
     setCapturedUrl(null);
     setErrorMessage(null);
+    setIsManualEntry(false);
     setStep("camera");
+  };
+
+  // Salta la fotocamera e l'OCR: entra direttamente nella revisione con i
+  // campi vuoti, da compilare a mano prima di cercare su PokeWallet.
+  const handleManualSearch = () => {
+    setErrorMessage(null);
+    setOcrRawText("");
+    setCardName("");
+    setCardNumber("");
+    setIsManualEntry(true);
+    setStep("review");
   };
 
   const handleSearch = async () => {
@@ -506,7 +533,7 @@ export default function ScansPage() {
       }
     });
     const offReview = onReviewRequested(() => {
-      if (step === "confirm") setStep("review");
+      if (step === "confirm" || step === "choose") setStep("review");
     });
     const offSaved = onCardSaved(() => {
       if (step === "confirm") {
@@ -519,6 +546,11 @@ export default function ScansPage() {
       const track = streamRef.current?.getVideoTracks()[0];
       if (track) void focusAtPoint(track, x, y);
     });
+    const offSelectResult = onSelectResultRequested((resultId) => {
+      if (step !== "choose") return;
+      const result = searchResults.find((r) => r.id === resultId);
+      if (result) void selectResult(result);
+    });
     return () => {
       offRetake();
       offSearch();
@@ -526,11 +558,12 @@ export default function ScansPage() {
       offReview();
       offSaved();
       offFocus();
+      offSelectResult();
     };
     // handleRetake/handleSearch non sono memoizzate: si riaggancia la
     // sottoscrizione ad ogni render, costo trascurabile per un Set locale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRemoteClient, step, handleRetake, handleSearch]);
+  }, [isRemoteClient, step, handleRetake, handleSearch, searchResults]);
 
   const handleCreateCollection = async () => {
     if (!newCollectionName.trim()) return;
@@ -580,6 +613,7 @@ export default function ScansPage() {
     if (capturedUrl) URL.revokeObjectURL(capturedUrl);
     if (resultImageUrl) URL.revokeObjectURL(resultImageUrl);
     setCapturedUrl(null);
+    setIsManualEntry(false);
     setOcrRawText("");
     setCardName("");
     setCardNumber("");
@@ -638,6 +672,12 @@ export default function ScansPage() {
                 onRetake={handleRequestRetake}
                 onSearch={handleRequestSearch}
               />
+            ) : remoteProgress && remoteProgress.step === "choose" ? (
+              <ChooseResultStepSection
+                results={remoteProgress.results}
+                onSelect={handleRequestSelectResult}
+                onBack={handleHostRequestBackToReview}
+              />
             ) : remoteProgress &&
               remoteProgress.step === "confirm" &&
               remoteProgress.selectedResult ? (
@@ -653,7 +693,7 @@ export default function ScansPage() {
                 onTargetCollectionChange={setTargetCollectionId}
                 onNewCollectionNameChange={setNewCollectionName}
                 onCreateCollection={handleCreateCollection}
-                onCancel={handleHostCancelConfirm}
+                onCancel={handleHostRequestBackToReview}
                 onSave={handleHostSaveConfirmedCard}
               />
             ) : remoteProgress && remoteProgress.step !== "camera" ? (
@@ -671,14 +711,22 @@ export default function ScansPage() {
               />
             )
           ) : (
-            <CameraStepSection
-              videoRef={videoRef}
-              guideRef={guideRef}
-              cameraError={cameraError}
-              cameraReady={cameraReady}
-              onCapture={handleCapture}
-              onFocusTap={handleFocusTap}
-            />
+            <div className="flex flex-col gap-3">
+              <CameraStepSection
+                videoRef={videoRef}
+                guideRef={guideRef}
+                cameraError={cameraError}
+                cameraReady={cameraReady}
+                onCapture={handleCapture}
+                onFocusTap={handleFocusTap}
+              />
+              <button
+                onClick={handleManualSearch}
+                className="text-center text-xs text-slate-500 underline dark:text-slate-400"
+              >
+                Oppure cerca una carta manualmente, senza foto
+              </button>
+            </div>
           ))}
 
         {step === "ocr" && (
@@ -695,6 +743,7 @@ export default function ScansPage() {
             cardNumber={cardNumber}
             ocrRawText={ocrRawText}
             errorMessage={errorMessage}
+            manualMode={isManualEntry}
             onCardNameChange={setCardName}
             onCardNumberChange={setCardNumber}
             onRetake={handleRetake}

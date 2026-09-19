@@ -43,7 +43,8 @@ type WireCommandPayload =
   | { kind: "fields-update"; cardName: string; cardNumber: string }
   | { kind: "review-request" }
   | { kind: "card-saved" }
-  | { kind: "focus-request"; x: number; y: number };
+  | { kind: "focus-request"; x: number; y: number }
+  | { kind: "select-result-request"; resultId: string };
 
 const COMMAND_KINDS = [
   "capture-request",
@@ -53,6 +54,7 @@ const COMMAND_KINDS = [
   "review-request",
   "card-saved",
   "focus-request",
+  "select-result-request",
 ] as const;
 
 export type RemoteScanStep =
@@ -118,6 +120,7 @@ const fieldsListeners = new Set<
 const reviewListeners = new Set<() => void>();
 const cardSavedListeners = new Set<() => void>();
 const focusListeners = new Set<(point: { x: number; y: number }) => void>();
+const selectResultListeners = new Set<(resultId: string) => void>();
 const videoListeners = new Set<(stream: MediaStream | null) => void>();
 const progressListeners = new Set<(progress: RemoteScanProgress) => void>();
 
@@ -189,6 +192,14 @@ export function onFocusRequested(
 ): () => void {
   focusListeners.add(cb);
   return () => focusListeners.delete(cb);
+}
+
+/** Solo lato "client" (telefono): notifica quando il PC sceglie uno dei risultati di ricerca trovati. */
+export function onSelectResultRequested(
+  cb: (resultId: string) => void,
+): () => void {
+  selectResultListeners.add(cb);
+  return () => selectResultListeners.delete(cb);
 }
 
 /**
@@ -303,6 +314,9 @@ function attachConnectionHandlers(conn: DataConnection, role: RemoteRole): void 
           break;
         case "focus-request":
           focusListeners.forEach((cb) => cb({ x: data.x, y: data.y }));
+          break;
+        case "select-result-request":
+          selectResultListeners.forEach((cb) => cb(data.resultId));
           break;
       }
     } else if (role === "host" && isWireProgressPayload(data)) {
@@ -590,6 +604,25 @@ export function requestFocus(x: number, y: number): void {
   if (!connection || !connection.open) return;
   const payload: WireCommandPayload = { kind: "focus-request", x, y };
   connection.send(payload);
+}
+
+/**
+ * Solo lato "host" (PC): quando il telefono ha trovato più carte corrispondenti
+ * ed è in attesa nello step "choose", sceglie per lui quella indicata.
+ */
+export function requestSelectResult(resultId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (!connection || !connection.open) {
+      reject(new Error("Nessun telefono collegato."));
+      return;
+    }
+    const payload: WireCommandPayload = {
+      kind: "select-result-request",
+      resultId,
+    };
+    connection.send(payload);
+    resolve();
+  });
 }
 
 export function disconnect(): void {

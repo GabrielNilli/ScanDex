@@ -43,9 +43,7 @@ type View =
 //  COMPONENT
 // =================================
 export default function CollectionsPage() {
-  // Di default si apre direttamente sull'elenco di tutti gli scan, non sulla
-  // griglia delle collezioni: è la vista più utile appena entrati nella pagina.
-  const [view, setView] = useState<View>({ name: "all" });
+  const [view, setView] = useState<View>({ name: "collections" });
   const [collections, setCollections] = useState<CollectionWithCount[]>([]);
   const [allCards, setAllCards] = useState<CardRecord[]>([]);
   const [cards, setCards] = useState<CardRecord[]>([]);

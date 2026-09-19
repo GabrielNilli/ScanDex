@@ -1,7 +1,7 @@
 // =================================
 //  IMPORTS
 // =================================
-import { AlertTriangle, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, Camera, RefreshCw, Search } from "lucide-react";
 
 // =================================
 //  COMPONENT
@@ -12,6 +12,7 @@ export default function ReviewStepSection({
   cardNumber,
   ocrRawText,
   errorMessage,
+  manualMode = false,
   onCardNameChange,
   onCardNumberChange,
   onRetake,
@@ -22,6 +23,8 @@ export default function ReviewStepSection({
   cardNumber: string;
   ocrRawText: string;
   errorMessage: string | null;
+  /** true quando si sta cercando una carta a mano, senza essere passati dalla fotocamera. */
+  manualMode?: boolean;
   onCardNameChange: (value: string) => void;
   onCardNumberChange: (value: string) => void;
   onRetake: () => void;
@@ -48,6 +51,11 @@ export default function ReviewStepSection({
       )}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        {manualMode && (
+          <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+            Inserisci nome ed eventualmente numero della carta da cercare.
+          </p>
+        )}
         <label className="mb-1 block text-xs font-semibold text-slate-500 dark:text-slate-400">
           Nome carta
         </label>
@@ -86,8 +94,17 @@ export default function ReviewStepSection({
           onClick={onRetake}
           className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
         >
-          <RefreshCw size={16} />
-          Rifai foto
+          {manualMode ? (
+            <>
+              <Camera size={16} />
+              Usa fotocamera
+            </>
+          ) : (
+            <>
+              <RefreshCw size={16} />
+              Rifai foto
+            </>
+          )}
         </button>
         <button
           onClick={onSearch}
