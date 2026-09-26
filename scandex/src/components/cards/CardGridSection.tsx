@@ -18,11 +18,14 @@ export default function CardGridSection({
   loading,
   emptyMessage,
   onSelect,
+  quantityOf,
 }: {
   cards: CardRecord[];
   loading: boolean;
   emptyMessage: string;
   onSelect: (card: CardRecord) => void;
+  /** Copie possedute della carta nella sua collezione (badge "×N" se più di una). */
+  quantityOf?: (card: CardRecord) => number;
 }) {
   // =================================
   //  RENDER
@@ -64,6 +67,7 @@ export default function CardGridSection({
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {cards.map((card) => {
         const highestPrice = getHighestCardmarketPrice(getCardmarketData(card));
+        const quantity = quantityOf?.(card) ?? 1;
         return (
           <button
             key={card.id}
@@ -79,6 +83,11 @@ export default function CardGridSection({
               {card.card_number && (
                 <span className="absolute left-1.5 top-1.5 rounded-full bg-slate-900/80 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
                   #{card.card_number}
+                </span>
+              )}
+              {quantity > 1 && (
+                <span className="absolute bottom-1.5 right-1.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold text-white shadow">
+                  ×{quantity}
                 </span>
               )}
               {Boolean(card.favorite) && (

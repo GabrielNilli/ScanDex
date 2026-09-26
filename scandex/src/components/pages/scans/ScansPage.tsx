@@ -9,7 +9,11 @@ import {
   type PokewalletSearchResult,
 } from "../../../services/pokewallet/pokewalletApi.ts";
 import { recognizeCard } from "../../../services/ocr/ocrService.ts";
-import { saveScannedCard } from "../../../services/cards/cardsService.ts";
+import {
+  findCardsByPokewalletId,
+  saveScannedCard,
+} from "../../../services/cards/cardsService.ts";
+import type { CardRecord } from "../../../services/db/types.ts";
 import {
   createCollection,
   listCollections,
@@ -102,6 +106,8 @@ export default function ScansPage() {
   const [targetCollectionId, setTargetCollectionId] = useState<number | "">("");
   const [newCollectionName, setNewCollectionName] = useState<string>("");
   const [creatingCollection, setCreatingCollection] = useState(false);
+  // Copie già salvate della carta in conferma, per avvisare dei doppioni.
+  const [existingCopies, setExistingCopies] = useState<CardRecord[]>([]);
 
   // --- Collegamento remoto (questo telefono collegato a un PC, vedi Impostazioni) ---
   const [remoteStatus, setRemoteStatus] = useState<RemoteStatus>(() =>
@@ -265,6 +271,29 @@ export default function ScansPage() {
       })
       .catch((err) => console.warn("Errore caricamento collezioni:", err));
   }, [step, remoteProgress?.step]);
+
+  // Verifica doppioni: cerca nel database locale le carte già salvate con lo
+  // stesso id pokewallet di quella in conferma (anche quella confermata dal
+  // telefono quando questo PC è l'host, dato che verrà salvata qui).
+  const confirmPokewalletId =
+    step === "confirm" && selectedResult
+      ? selectedResult.id
+      : remoteProgress?.step === "confirm" && remoteProgress.selectedResult
+        ? remoteProgress.selectedResult.id
+        : null;
+  useEffect(() => {
+    setExistingCopies([]);
+    if (!confirmPokewalletId) return;
+    let cancelled = false;
+    findCardsByPokewalletId(confirmPokewalletId)
+      .then((copies) => {
+        if (!cancelled) setExistingCopies(copies);
+      })
+      .catch((err) => console.warn("Errore verifica doppioni:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmPokewalletId]);
 
   const runOcr = useCallback(async (source: Blob | HTMLCanvasElement) => {
     setStep("ocr");
@@ -693,6 +722,7 @@ export default function ScansPage() {
                 onTargetCollectionChange={setTargetCollectionId}
                 onNewCollectionNameChange={setNewCollectionName}
                 onCreateCollection={handleCreateCollection}
+                existingCopies={existingCopies}
                 onCancel={handleHostRequestBackToReview}
                 onSave={handleHostSaveConfirmedCard}
               />
@@ -776,6 +806,7 @@ export default function ScansPage() {
             onTargetCollectionChange={setTargetCollectionId}
             onNewCollectionNameChange={setNewCollectionName}
             onCreateCollection={handleCreateCollection}
+            existingCopies={isRemoteClient ? [] : existingCopies}
             onCancel={() => setStep("review")}
             onSave={handleSave}
             remoteMode={isRemoteClient}

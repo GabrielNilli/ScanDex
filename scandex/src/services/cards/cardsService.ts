@@ -206,12 +206,85 @@ export async function moveCardToCollection(
 }
 
 /**
- * Elimina una carta e la relativa immagine salvata in OPFS.
+ * Elenca tutte le carte già salvate con lo stesso id pokewallet, in qualsiasi
+ * collezione. Usato allo scan per avvisare se la carta è già posseduta.
+ */
+export async function findCardsByPokewalletId(
+  pokewalletId: string,
+): Promise<CardRecord[]> {
+  return dbService.query<CardRecord>(
+    "SELECT * FROM cards WHERE pokewallet_id = ? ORDER BY created_at ASC, id ASC",
+    [pokewalletId],
+  );
+}
+
+/**
+ * Elenca le copie di una carta nella sua stessa collezione (lei compresa): la
+ * quantità posseduta è rappresentata da righe distinte, una per copia fisica.
+ */
+export async function getCardCopies(card: CardRecord): Promise<CardRecord[]> {
+  return dbService.query<CardRecord>(
+    "SELECT * FROM cards WHERE pokewallet_id = ? AND collection_id IS ? ORDER BY created_at ASC, id ASC",
+    [card.pokewallet_id, card.collection_id],
+  );
+}
+
+/**
+ * Imposta il numero di copie di una carta nella sua collezione: aggiunge righe
+ * duplicate (stessa immagine e dati, senza note/preferito) o rimuove le copie più
+ * recenti, senza mai eliminare la carta passata. Minimo 1: per scendere a 0 si
+ * elimina la carta.
+ */
+export async function setCardQuantity(
+  card: CardRecord,
+  quantity: number,
+): Promise<void> {
+  const target = Math.max(1, Math.floor(quantity));
+  const copies = await getCardCopies(card);
+  const diff = target - copies.length;
+
+  if (diff > 0) {
+    for (let i = 0; i < diff; i++) {
+      await dbService.run(
+        `INSERT INTO cards
+          (collection_id, pokewallet_id, name, clean_name, card_number, set_name, set_code, set_id, rarity, card_type, image_path, favorite, raw_json)
+         SELECT collection_id, pokewallet_id, name, clean_name, card_number, set_name, set_code, set_id, rarity, card_type, image_path, 0, raw_json
+         FROM cards WHERE id = ?`,
+        [card.id],
+      );
+    }
+  } else if (diff < 0) {
+    const removable = copies
+      .filter((c) => c.id !== card.id)
+      .reverse()
+      .slice(0, -diff);
+    for (const copy of removable) {
+      await deleteCard(copy.id);
+    }
+  }
+}
+
+/**
+ * Elimina un'immagine OPFS solo se nessuna carta la usa più: le copie della stessa
+ * carta (e gli scan ripetuti) condividono lo stesso file "<pokewallet_id>.jpg".
+ */
+export async function deleteImageIfUnused(imagePath: string): Promise<void> {
+  const rows = await dbService.query<{ count: number }>(
+    "SELECT COUNT(*) as count FROM cards WHERE image_path = ?",
+    [imagePath],
+  );
+  if (Number(rows[0]?.count ?? 0) === 0) {
+    await deleteImage(imagePath);
+  }
+}
+
+/**
+ * Elimina una carta e la relativa immagine salvata in OPFS (se non condivisa).
  */
 export async function deleteCard(id: number): Promise<void> {
   const card = await getCard(id);
   await dbService.exec("DELETE FROM cards WHERE id = ?", [id]);
   if (card?.image_path) {
-    await deleteImage(card.image_path);
+    await deleteImageIfUnused(card.image_path);
   }
 }

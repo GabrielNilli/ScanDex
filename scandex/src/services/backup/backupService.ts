@@ -143,8 +143,8 @@ export async function exportBackup(): Promise<{ cardCount: number }> {
 /**
  * Importa un file di backup: crea le collezioni mancanti (per nome, non per id,
  * dato che gli id locali possono differire tra dispositivi) e le carte non ancora
- * presenti (deduplicate per pokewallet_id, per poter importare più volte lo stesso
- * file senza creare doppioni).
+ * presenti (deduplicate per numero di copie per pokewallet_id, per poter importare
+ * più volte lo stesso file senza creare doppioni).
  */
 export async function importBackup(file: File): Promise<ImportResult> {
   const text = await file.text();
@@ -173,16 +173,22 @@ export async function importBackup(file: File): Promise<ImportResult> {
     }
   }
 
+  // Conteggio (non semplice presenza) delle copie già possedute per pokewallet_id:
+  // un backup con più copie della stessa carta le importa tutte, ma reimportare lo
+  // stesso file salta quelle già presenti invece di raddoppiarle.
   const existingCards = await listAllCards();
-  const existingPokewalletIds = new Set(
-    existingCards.map((c: CardRecord) => c.pokewallet_id),
-  );
+  const existingCopies = new Map<string, number>();
+  for (const c of existingCards as CardRecord[]) {
+    existingCopies.set(c.pokewallet_id, (existingCopies.get(c.pokewallet_id) ?? 0) + 1);
+  }
 
   let importedCards = 0;
   let skippedCards = 0;
 
   for (const card of backup.cards ?? []) {
-    if (existingPokewalletIds.has(card.pokewallet_id)) {
+    const remaining = existingCopies.get(card.pokewallet_id) ?? 0;
+    if (remaining > 0) {
+      existingCopies.set(card.pokewallet_id, remaining - 1);
       skippedCards++;
       continue;
     }
@@ -220,7 +226,6 @@ export async function importBackup(file: File): Promise<ImportResult> {
       ],
     );
 
-    existingPokewalletIds.add(card.pokewallet_id);
     importedCards++;
   }
 

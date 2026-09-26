@@ -9,6 +9,7 @@ import {
   listCardsBySetId,
   moveCardToCollection,
   refreshCardPricing,
+  setCardQuantity,
   setFavorite,
   updateCardNotes,
 } from "../../../services/cards/cardsService.ts";
@@ -149,6 +150,12 @@ export default function SetsPage() {
       .catch((err) => console.warn("Errore caricamento collezioni:", err));
   };
 
+  const handleChangeQuantity = async (card: CardRecord, quantity: number) => {
+    await setCardQuantity(card, quantity);
+    if (card.set_id) setSetCards(await listCardsBySetId(card.set_id));
+    await loadData();
+  };
+
   const handleDeleteCard = async (card: CardRecord) => {
     if (!window.confirm(`Eliminare "${card.name}" dalla collezione?`)) return;
     await deleteCard(card.id);
@@ -235,6 +242,7 @@ export default function SetsPage() {
           onRefreshPrice={handleRefreshPrice}
           onUpdateNotes={handleUpdateNotes}
           onMoveToCollection={handleMoveToCollection}
+          onChangeQuantity={handleChangeQuantity}
         />
       )}
     </div>

@@ -1,7 +1,15 @@
 // =================================
 //  IMPORTS
 // =================================
-import { AlertTriangle, CheckCircle2, Loader2, Send, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Copy,
+  Loader2,
+  Send,
+  X,
+} from "lucide-react";
+import type { CardRecord } from "../../../../services/db/types.ts";
 import type { PokewalletSearchResult } from "../../../../services/pokewallet/pokewalletApi.ts";
 import type { CollectionWithCount } from "../../../../services/collections/collectionsService.ts";
 
@@ -20,6 +28,7 @@ export default function ConfirmStepSection({
   onTargetCollectionChange,
   onNewCollectionNameChange,
   onCreateCollection,
+  existingCopies = [],
   onCancel,
   onSave,
   remoteMode = false,
@@ -37,6 +46,8 @@ export default function ConfirmStepSection({
   onTargetCollectionChange: (value: number | "") => void;
   onNewCollectionNameChange: (value: string) => void;
   onCreateCollection: () => void;
+  /** Copie di questa carta già salvate, per avvisare che si sta creando un doppione. */
+  existingCopies?: CardRecord[];
   onCancel: () => void;
   onSave: () => void;
   /** true quando questo telefono è collegato a un PC ed invierà la carta invece di salvarla in locale. */
@@ -44,6 +55,25 @@ export default function ConfirmStepSection({
   remoteCollectionName?: string;
   onRemoteCollectionNameChange?: (value: string) => void;
 }) {
+  // Nomi delle collezioni in cui la carta è già presente, con il numero di copie.
+  const copiesByCollection = new Map<number | null, number>();
+  for (const copy of existingCopies) {
+    copiesByCollection.set(
+      copy.collection_id,
+      (copiesByCollection.get(copy.collection_id) ?? 0) + 1,
+    );
+  }
+  const copiesSummary = [...copiesByCollection.entries()]
+    .map(([collectionId, count]) => {
+      const name =
+        collectionId === null
+          ? "senza collezione"
+          : (collections.find((c) => c.id === collectionId)?.name ??
+            "collezione sconosciuta");
+      return count > 1 ? `${name} (×${count})` : name;
+    })
+    .join(", ");
+
   // =================================
   //  RENDER
   // =================================
@@ -70,6 +100,22 @@ export default function ConfirmStepSection({
           &bull; {result.card_info.rarity}
         </p>
       </div>
+
+      {existingCopies.length > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+          <Copy size={16} className="mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold">
+              {existingCopies.length === 1
+                ? "Hai già questa carta."
+                : `Hai già ${existingCopies.length} copie di questa carta.`}
+            </p>
+            <p className="text-xs">
+              In: {copiesSummary}. Salvandola ne aggiungerai un'altra copia.
+            </p>
+          </div>
+        </div>
+      )}
 
       {errorMessage && (
         <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">

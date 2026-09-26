@@ -2,7 +2,15 @@
 //  IMPORTS
 // =================================
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Heart, Layers, LayoutGrid, Search } from "lucide-react";
+import {
+  ArrowDownWideNarrow,
+  ArrowLeft,
+  ArrowUpNarrowWide,
+  Heart,
+  Layers,
+  LayoutGrid,
+  Search,
+} from "lucide-react";
 import {
   createCollection,
   deleteCollection,
@@ -16,12 +24,15 @@ import {
   listFavoriteCards,
   moveCardToCollection,
   refreshCardPricing,
+  setCardQuantity,
   setFavorite,
   updateCardNotes,
 } from "../../../services/cards/cardsService.ts";
 import type { CardRecord } from "../../../services/db/types.ts";
 import {
   formatPrice,
+  getCardmarketData,
+  getHighestCardmarketPrice,
   getTotalPortfolioValue,
 } from "../../../services/pokewallet/cardmarketPrices.ts";
 import Logo from "../../ui/Logo.tsx";
@@ -39,6 +50,60 @@ type View =
   | { name: "favorites" }
   | { name: "all" };
 
+type SortKey = "date" | "number" | "price";
+type SortDir = "asc" | "desc";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  date: "Data",
+  number: "Numero",
+  price: "Prezzo",
+};
+
+// Direzione più naturale per ciascun criterio quando lo si seleziona.
+const DEFAULT_SORT_DIR: Record<SortKey, SortDir> = {
+  date: "desc",
+  number: "asc",
+  price: "desc",
+};
+
+/** Chiave che identifica le copie della stessa carta nella stessa collezione. */
+function copyKey(card: CardRecord): string {
+  return `${card.pokewallet_id}|${card.collection_id ?? ""}`;
+}
+
+/**
+ * Confronto per il criterio scelto, in ordine crescente. Numeri come "025/165",
+ * "TG05" o "SWSH050" si confrontano in modo "naturale" (2 < 10). Le carte senza
+ * valore finiscono sempre in fondo, indipendentemente dalla direzione.
+ */
+function compareCards(
+  a: CardRecord,
+  b: CardRecord,
+  key: SortKey,
+  dir: SortDir,
+): number {
+  const sign = dir === "asc" ? 1 : -1;
+  if (key === "price") {
+    const pa = getHighestCardmarketPrice(getCardmarketData(a));
+    const pb = getHighestCardmarketPrice(getCardmarketData(b));
+    if (pa === null || pb === null) return pa === pb ? 0 : pa === null ? 1 : -1;
+    return (pa - pb) * sign;
+  }
+  if (key === "number") {
+    if (!a.card_number || !b.card_number) {
+      return a.card_number === b.card_number ? 0 : a.card_number ? -1 : 1;
+    }
+    const bySet = (a.set_name ?? "").localeCompare(b.set_name ?? "");
+    if (bySet !== 0) return bySet;
+    return (
+      a.card_number.localeCompare(b.card_number, undefined, { numeric: true }) *
+      sign
+    );
+  }
+  const byDate = (a.created_at ?? "").localeCompare(b.created_at ?? "");
+  return (byDate !== 0 ? byDate : a.id - b.id) * sign;
+}
+
 // =================================
 //  COMPONENT
 // =================================
@@ -52,6 +117,8 @@ export default function CollectionsPage() {
   const [showNewCollection, setShowNewCollection] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [cardSearchQuery, setCardSearchQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT_DIR.date);
 
   const loadOverview = useCallback(async () => {
     const [collectionsList, cardsList] = await Promise.all([
@@ -90,9 +157,24 @@ export default function CollectionsPage() {
 
   const filteredCards = useMemo(() => {
     const query = cardSearchQuery.trim().toLowerCase();
-    if (!query) return cards;
-    return cards.filter((c) => c.name.toLowerCase().includes(query));
-  }, [cards, cardSearchQuery]);
+    const matching = query
+      ? cards.filter((c) => c.name.toLowerCase().includes(query))
+      : cards;
+    return [...matching].sort((a, b) => compareCards(a, b, sortKey, sortDir));
+  }, [cards, cardSearchQuery, sortKey, sortDir]);
+
+  // Numero di copie di ogni carta nella sua collezione, calcolato su tutte le
+  // carte (non solo quelle della vista, es. nei preferiti non tutte le copie lo sono).
+  const quantityByCopyKey = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of allCards) map.set(copyKey(c), (map.get(copyKey(c)) ?? 0) + 1);
+    return map;
+  }, [allCards]);
+
+  const handleSortKeyChange = (key: SortKey) => {
+    setSortKey(key);
+    setSortDir(DEFAULT_SORT_DIR[key]);
+  };
 
   const totalValue = useMemo(() => getTotalPortfolioValue(allCards), [allCards]);
   const viewValue = useMemo(() => getTotalPortfolioValue(cards), [cards]);
@@ -177,6 +259,11 @@ export default function CollectionsPage() {
     );
     // Aggiorna il conteggio carte delle collezioni coinvolte.
     await loadOverview();
+  };
+
+  const handleChangeQuantity = async (card: CardRecord, quantity: number) => {
+    await setCardQuantity(card, quantity);
+    await Promise.all([loadOverview(), loadCardsForView()]);
   };
 
   const handleDeleteCard = async (card: CardRecord) => {
@@ -293,7 +380,35 @@ export default function CollectionsPage() {
                     </span>
                   )}
                 </div>
-                <div className="relative sm:w-64">
+                <div className="flex gap-2">
+                <div className="flex shrink-0 items-center gap-1">
+                  <select
+                    value={sortKey}
+                    onChange={(e) => handleSortKeyChange(e.target.value as SortKey)}
+                    className="rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-slate-700 dark:bg-slate-800"
+                    title="Ordina per"
+                  >
+                    {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                      <option key={key} value={key}>
+                        {SORT_LABELS[key]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() =>
+                      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"))
+                    }
+                    className="rounded-xl border border-slate-200 bg-white p-2 text-slate-500 shadow-sm hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
+                    title={sortDir === "asc" ? "Crescente" : "Decrescente"}
+                  >
+                    {sortDir === "asc" ? (
+                      <ArrowUpNarrowWide size={16} />
+                    ) : (
+                      <ArrowDownWideNarrow size={16} />
+                    )}
+                  </button>
+                </div>
+                <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
                   <Search
                     size={16}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -305,6 +420,7 @@ export default function CollectionsPage() {
                     placeholder="Cerca per nome carta..."
                     className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:border-slate-700 dark:bg-slate-800"
                   />
+                </div>
                 </div>
               </div>
             )}
@@ -321,6 +437,7 @@ export default function CollectionsPage() {
                       : "Questa collezione è vuota. Scansiona una carta per aggiungerla qui."
               }
               onSelect={setDetailCard}
+              quantityOf={(card) => quantityByCopyKey.get(copyKey(card)) ?? 1}
             />
           </div>
         )}
@@ -336,6 +453,7 @@ export default function CollectionsPage() {
           onRefreshPrice={handleRefreshPrice}
           onUpdateNotes={handleUpdateNotes}
           onMoveToCollection={handleMoveToCollection}
+          onChangeQuantity={handleChangeQuantity}
         />
       )}
     </div>

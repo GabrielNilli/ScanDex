@@ -6,8 +6,11 @@ import {
   AlertTriangle,
   ArrowLeft,
   Check,
+  Copy,
   ExternalLink,
   Layers,
+  Minus,
+  Plus,
   RefreshCw,
   Star,
   StickyNote,
@@ -15,6 +18,7 @@ import {
 } from "lucide-react";
 import type { CardRecord } from "../../services/db/types.ts";
 import type { CollectionWithCount } from "../../services/collections/collectionsService.ts";
+import { getCardCopies } from "../../services/cards/cardsService.ts";
 import {
   formatPrice,
   getCardmarketData,
@@ -59,6 +63,7 @@ export default function CardDetailSection({
   onRefreshPrice,
   onUpdateNotes,
   onMoveToCollection,
+  onChangeQuantity,
 }: {
   card: CardRecord;
   collections: CollectionWithCount[];
@@ -71,6 +76,7 @@ export default function CardDetailSection({
     card: CardRecord,
     collectionId: number | null,
   ) => Promise<void>;
+  onChangeQuantity: (card: CardRecord, quantity: number) => Promise<void>;
 }) {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
@@ -169,6 +175,11 @@ export default function CardDetailSection({
               card={card}
               collections={collections}
               onMoveToCollection={onMoveToCollection}
+            />
+
+            <CardQuantitySection
+              card={card}
+              onChangeQuantity={onChangeQuantity}
             />
 
             <CardNotesSection card={card} onUpdateNotes={onUpdateNotes} />
@@ -327,6 +338,80 @@ function CardCollectionSection({
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+function CardQuantitySection({
+  card,
+  onChangeQuantity,
+}: {
+  card: CardRecord;
+  onChangeQuantity: (card: CardRecord, quantity: number) => Promise<void>;
+}) {
+  const [quantity, setQuantity] = useState<number | null>(null);
+  const [updating, setUpdating] = useState(false);
+
+  // Le copie sono righe distinte nel DB: si contano quelle della stessa carta
+  // nella stessa collezione (anche dopo uno spostamento di collezione).
+  useEffect(() => {
+    let cancelled = false;
+    getCardCopies(card)
+      .then((copies) => {
+        if (!cancelled) setQuantity(copies.length);
+      })
+      .catch((err) => console.warn("Errore conteggio copie:", err));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card.id, card.pokewallet_id, card.collection_id]);
+
+  const handleChange = async (next: number) => {
+    if (next < 1 || updating) return;
+    setUpdating(true);
+    try {
+      await onChangeQuantity(card, next);
+      setQuantity((await getCardCopies(card)).length);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-2xl bg-white p-4 dark:bg-slate-800">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h4 className="font-headline flex items-center gap-1.5 text-sm font-bold">
+            <Copy size={14} className="text-slate-400" />
+            Quantità
+          </h4>
+          <p className="text-[11px] text-slate-400">
+            Copie in questa collezione. Ogni copia è una carta separata.
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            onClick={() => quantity !== null && handleChange(quantity - 1)}
+            disabled={updating || quantity === null || quantity <= 1}
+            className="rounded-lg bg-slate-100 p-1.5 text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-40 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+            title="Rimuovi una copia"
+          >
+            <Minus size={14} />
+          </button>
+          <span className="w-8 text-center text-sm font-semibold tabular-nums">
+            {quantity ?? "–"}
+          </span>
+          <button
+            onClick={() => quantity !== null && handleChange(quantity + 1)}
+            disabled={updating || quantity === null}
+            className="rounded-lg bg-slate-100 p-1.5 text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-40 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+            title="Aggiungi una copia"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

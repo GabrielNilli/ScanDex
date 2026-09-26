@@ -4,7 +4,7 @@
 
 import { dbService } from "../db/index.ts";
 import type { CollectionRecord } from "../db/types.ts";
-import { deleteImage } from "../opfs/images.ts";
+import { deleteImageIfUnused } from "../cards/cardsService.ts";
 
 export interface CollectionWithCount extends CollectionRecord {
   cardCount: number;
@@ -81,9 +81,10 @@ export async function deleteCollection(id: number): Promise<void> {
   await dbService.exec("DELETE FROM cards WHERE collection_id = ?", [id]);
   await dbService.exec("DELETE FROM collections WHERE id = ?", [id]);
 
-  await Promise.all(
-    cards
-      .filter((c) => c.image_path)
-      .map((c) => deleteImage(c.image_path as string)),
+  // Le immagini possono essere condivise con copie della stessa carta in altre
+  // collezioni: si eliminano solo quelle non più usate da nessuna carta.
+  const paths = new Set(
+    cards.map((c) => c.image_path).filter((p): p is string => Boolean(p)),
   );
+  await Promise.all([...paths].map((p) => deleteImageIfUnused(p)));
 }
